@@ -1,0 +1,21 @@
+# project files
+.idea/
+*.iml
+.vscode/
+
+# Python tooling (tests, pre-commit)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+test-results/
+
+# Ansible (ansible-lint caches collections and roles here)
+.ansible/
+
+# Pre-commit
+.pre-commit-config.local.yaml
+
+# Secrets: .env files are rendered on the host by raspberry's secrets role, never committed
+.env
+*.env
