@@ -44,12 +44,15 @@ From `ansible/`, always with `--limit` to one host and a dry run first:
 
 A second run must report `changed=0`. Notes for Claude Code are in `CLAUDE.md`.
 
-## Rulesets
+## Rulesets and repository settings
 
-The rulesets for `main` live in `.github/rulesets/`. Apply them once after cloning, and after every change to
-those files (needs `gh` logged in as admin, and `jq`):
+The rulesets for `main` live in `.github/rulesets/`, the other repository settings (auto merge, deleting merged
+branches, secret scanning with push protection) in `.github/repo-settings.json`. Apply them once after cloning, and
+after every change to those files (needs `gh` logged in as admin, and `jq`):
 
 ```sh
 scripts/rulesets.sh diff
 scripts/rulesets.sh apply
+scripts/repo-settings.sh diff
+scripts/repo-settings.sh apply
 ```
