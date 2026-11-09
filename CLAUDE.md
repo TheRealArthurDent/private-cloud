@@ -7,9 +7,11 @@ data and an external USB SSD for backups. The apps are reachable only from the h
 
 ## State of the repo
 
-- **Scaffold only so far**: tooling, CI, rulesets, guard hook, inventory and `ansible/deploy.yaml` with the
-  `--limit` guard. The `opencloud` role comes next, Paperless after it. Each app gets its own role and its own
-  Compose project.
+- **OpenCloud** is the first app: `opencloud/docker-compose.yaml` (copied to the host as it is, project
+  `opencloud`) and the role `ansible/roles/opencloud`, tested with Molecule. Paperless comes next. Each app gets
+  its own directory, role and Compose project.
+- The README's OpenCloud section lists what raspberry must provide on the host (secrets key, SAN, nginx vhost,
+  Pi-hole record, `stack_backup_stacks`); keep it in sync when the role's assumptions change.
 - **raspberry provides what this stack depends on**, as it does for smart-home on raspi: host setup, Docker, the
   nginx reverse proxy with its vhosts and certificate, the secrets files (rendered from KeePass by raspberry's
   `secrets` role), and the resticprofile backups. raspberry is being extended to manage dungeon as a second host
@@ -20,8 +22,11 @@ data and an external USB SSD for backups. The apps are reachable only from the h
 
 ## Layout
 
-- `ansible/` – `deploy.yaml`, `inventory/hosts.yaml`, `requirements.yaml` (collections), `ansible.cfg`
-- `tests/` – pytest tests (Claude hook, rulesets, repository settings, repo hygiene, `--limit` guard)
+- `opencloud/` – `docker-compose.yaml` and `.env.example` (keys of the secrets file, without values)
+- `ansible/` – `deploy.yaml`, `inventory/hosts.yaml`, `requirements.yaml` (collections), `ansible.cfg`, the role
+  `roles/opencloud` and its Molecule scenario `molecule/default/`
+- `tests/` – pytest tests (compose file, restore volumes, Claude hook, rulesets, repository settings, repo hygiene,
+  `--limit` guard)
 - `.claude/` – Claude Code settings and the guard hook (`hooks/guard.py`)
 - `.github/rulesets/` (rulesets for `main`) + `.github/repo-settings.json` (auto merge, branch cleanup, secret
   scanning) – GitHub settings, applied by the user with `scripts/github-settings.sh apply`
@@ -57,6 +62,7 @@ Tooling lives in a venv at the repo root:
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/pre-commit install
 (cd ansible && ../.venv/bin/ansible-galaxy collection install -r requirements.yaml)
 .venv/bin/pytest tests                                  # unit tests (the --limit guard tests need the collections)
+(cd ansible && ../.venv/bin/molecule test)             # role test in a trixie container, needs Docker
 (cd ansible && ../.venv/bin/ansible-lint --strict)     # must report 0 findings (CI blocks)
 .venv/bin/pre-commit run --all-files                    # whitespace, YAML, gitleaks, renovate config, actionlint
 ```
@@ -65,7 +71,7 @@ When writing or changing an Ansible role, follow raspberry's `ansible-role` skil
 (`.claude/skills/ansible-role/SKILL.md` there): FQCN, `no_log`, idempotence, a Molecule `verify.yaml` check per
 change.
 
-CI runs on every PR: unit tests (`tests.yaml`), Ansible lint (`ansible.yaml`), codespell, and reviewdog (misspell,
+CI runs on every PR: unit tests (`tests.yaml`), Ansible lint and Molecule (`ansible.yaml`), codespell, and reviewdog (misspell,
 actionlint, yamllint, markdownlint). Required checks for `main` are in `.github/rulesets/`; a required job must
 run on every PR (no `paths` filter), or `tests/test_rulesets.py` fails.
 

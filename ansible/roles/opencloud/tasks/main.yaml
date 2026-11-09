@@ -1,0 +1,114 @@
+---
+# Deploys the OpenCloud stack. Needs raspberry's bootstrap on the host first: its secrets role writes
+# opencloud_env_file, its certificate_check role the root CA, its stack role the network siz and the restore helper.
+
+- name: Stat the secrets file
+  ansible.builtin.stat:
+    path: "{{ opencloud_env_file }}"
+  register: opencloud_env_stat
+
+- name: Ensure the secrets file exists
+  ansible.builtin.assert:
+    that: opencloud_env_stat.stat.exists
+    fail_msg: "{{ opencloud_env_file }} is missing. Run raspberry's bootstrap.yaml on {{ inventory_hostname }} first."
+    quiet: true
+
+- name: Read the secrets file
+  ansible.builtin.slurp:
+    src: "{{ opencloud_env_file }}"
+  register: opencloud_env
+  no_log: true
+
+# Without it, `opencloud init` would create the admin with an empty password and fail.
+- name: Ensure the admin password is set
+  ansible.builtin.assert:
+    that: >-
+      opencloud_env.content | b64decode
+      | regex_search('^OPENCLOUD_ADMIN_PASSWORD=.+$', multiline=True) is not none
+    fail_msg: "OPENCLOUD_ADMIN_PASSWORD is missing in {{ opencloud_env_file }}."
+    quiet: true
+  no_log: true
+
+- name: Stat the root CA
+  ansible.builtin.stat:
+    path: "{{ opencloud_root_ca }}"
+  register: opencloud_root_ca_stat
+
+# Docker would create a missing bind mount source as an empty directory, and the services would fail TLS to OC_URL.
+- name: Ensure the root CA exists
+  ansible.builtin.assert:
+    that: opencloud_root_ca_stat.stat.exists and opencloud_root_ca_stat.stat.isreg
+    fail_msg: >-
+      {{ opencloud_root_ca }} is missing. Run raspberry's check-certificates.yaml on {{ inventory_hostname }} first.
+    quiet: true
+
+- name: Ensure the compose directory exists
+  ansible.builtin.file:
+    path: "{{ opencloud_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Ensure the compose file is present
+  ansible.builtin.copy:
+    src: "{{ opencloud_repo_dir }}/opencloud/docker-compose.yaml"
+    dest: "{{ opencloud_compose_dir }}/docker-compose.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  register: opencloud_compose_file
+
+- name: Ensure the settings file is present
+  ansible.builtin.template:
+    src: settings.env.j2
+    dest: "{{ opencloud_settings_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  register: opencloud_settings
+
+- name: Check the Docker host
+  when: opencloud_manage_containers | bool
+  block:
+    # requests for the community.docker modules, yaml for docker_compose_v2
+    - name: Ensure Python libraries for the Docker modules are installed
+      ansible.builtin.apt:
+        name:
+          - python3-requests
+          - python3-yaml
+        state: present
+
+    - name: Read the network of the reverse proxy
+      community.docker.docker_network_info:
+        name: siz
+      register: opencloud_network
+
+    - name: Ensure the network of the reverse proxy exists
+      ansible.builtin.assert:
+        that: opencloud_network.exists
+        fail_msg: The Docker network siz is missing. Run raspberry's bootstrap.yaml on {{ inventory_hostname }} first.
+        quiet: true
+
+# Before compose up: on a fresh host, OpenCloud must find its config and data restored, not initialize empty ones.
+- name: Restore the volumes on a fresh host
+  ansible.builtin.import_tasks: restore.yaml
+
+# Images are pinned (Renovate), so the default pull policy "missing" pulls exactly when a version changes. Compose
+# recreates the container when the compose file or a value from the env files changed.
+- name: Ensure the stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ opencloud_compose_dir }}"
+    project_name: "{{ opencloud_project_name }}"
+    env_files:
+      - "{{ opencloud_settings_file }}"
+      - "{{ opencloud_env_file }}"
+    state: present
+    pull: policy
+    # Fail instead of reporting changed when the container crash-loops or stays unhealthy.
+    wait: true
+    wait_timeout: "{{ opencloud_wait_timeout }}"
+  when:
+    - opencloud_manage_containers | bool
+    # check mode doesn't write the files, so Compose would compare against the old ones or none.
+    - not (ansible_check_mode and (opencloud_compose_file is changed or opencloud_settings is changed))

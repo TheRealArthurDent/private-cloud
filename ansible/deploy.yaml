@@ -25,9 +25,10 @@
         quiet: true
       tags: always
 
-# The application roles (opencloud, later paperless) follow in their own PRs.
+# One role per app; paperless follows in its own PR.
 - name: Deploy the private cloud stack
   hosts: all
   become: true
   gather_facts: false
-  roles: []
+  roles:
+    - opencloud

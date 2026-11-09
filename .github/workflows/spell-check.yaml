@@ -24,3 +24,4 @@ jobs:
         uses: codespell-project/actions-codespell@v2.4.3
         with:
           check_filenames: true
+          ignore_words_list: siz
