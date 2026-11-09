@@ -1,0 +1,107 @@
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    repo_dir: "{{ lookup('ansible.builtin.env', 'MOLECULE_PROJECT_DIRECTORY') }}/.."
+    opencloud_dir: /etc/docker/opencloud
+  tasks:
+    - name: Check no secret was printed (-v and --diff, see molecule.yml)
+      vars:
+        # Read inside the assert so the log itself is never printed.
+        log_path: "{{ lookup('ansible.builtin.env', 'ANSIBLE_LOG_PATH') }}"
+        run_log: "{{ lookup('ansible.builtin.file', log_path) }}"
+        leaked: "{{ run_log | regex_findall('LEAKCANARY[\\w-]*') | unique }}"
+      ansible.builtin.assert:
+        that: run_log is not search('LEAKCANARY')
+        fail_msg: >-
+          Secrets leaked into the Ansible output: {{ leaked | join(', ') }}.
+          Find the task printing them and add no_log: true (or diff: false for a file that held secrets).
+        success_msg: No secrets in the Ansible log
+
+    - name: Stat the compose file
+      ansible.builtin.stat:
+        path: "{{ opencloud_dir }}/compose/docker-compose.yaml"
+        checksum_algorithm: sha1
+      register: compose_file
+
+    - name: Check the compose file is a copy of the repo's
+      ansible.builtin.assert:
+        that:
+          - compose_file.stat.exists
+          - compose_file.stat.pw_name == 'root'
+          - compose_file.stat.mode == '0644'
+          - >-
+            compose_file.stat.checksum
+            == lookup('ansible.builtin.file', repo_dir ~ '/opencloud/docker-compose.yaml', rstrip=false) | hash('sha1')
+        fail_msg: The deployed compose file is missing or differs from opencloud/docker-compose.yaml
+
+    - name: Stat the compose directory
+      ansible.builtin.stat:
+        path: "{{ opencloud_dir }}/compose"
+      register: compose_dir
+
+    - name: Check the compose directory gives the world no access
+      ansible.builtin.assert:
+        that:
+          - compose_dir.stat.isdir
+          - compose_dir.stat.pw_name == 'root'
+          - compose_dir.stat.mode == '0750'
+        fail_msg: "{{ opencloud_dir }}/compose is {{ compose_dir.stat.mode }}, expected 0750"
+
+    - name: Read the settings file
+      ansible.builtin.slurp:
+        src: "{{ opencloud_dir }}/settings.env"
+      register: settings_file
+
+    # The host is called dungeon-trixie in molecule.yml; on dungeon it's https://opencloud.dungeon.
+    - name: Check the settings file holds the URL of the nginx vhost
+      vars:
+        settings: "{{ settings_file.content | b64decode }}"
+      ansible.builtin.assert:
+        that: settings is search('(?m)^OPENCLOUD_URL=https://opencloud\.dungeon-trixie$')
+        fail_msg: "Unexpected settings.env: {{ settings }}"
+
+    - name: Read the restore items of the stack
+      ansible.builtin.slurp:
+        src: /etc/restic-restore/stacks/opencloud.json
+      register: restore_items_file
+
+    - name: Check the restore helper gets the stack's volumes with their container
+      vars:
+        items: "{{ (restore_items_file.content | b64decode | from_json)['items'] }}"
+        volumes: /var/lib/docker/volumes
+      ansible.builtin.assert:
+        that:
+          - items | list | sort == ['config', 'data']
+          - items['config'].paths == [volumes ~ '/opencloud_config/_data']
+          - items['data'].paths == [volumes ~ '/opencloud_data/_data']
+          - items['config'].containers == ['opencloud']
+          - items['data'].containers == ['opencloud']
+          - items['data'].preserve == []
+        fail_msg: "/etc/restic-restore/stacks/opencloud.json is wrong: {{ items | to_json }}"
+
+    - name: Read the calls of the restore helper stub
+      ansible.builtin.slurp:
+        src: /var/log/restic-restore-stub.log
+      register: restore_calls
+
+    # converge and the idempotence run; the stub's marker makes the second one a no-op.
+    - name: Check the role ran the clean-slate restore of the stack from the latest snapshot
+      vars:
+        calls: "{{ restore_calls.content | b64decode | trim | split('\n') | map('from_json') | list }}"
+      ansible.builtin.assert:
+        that:
+          - calls | length >= 1
+          - calls | unique == [['--runner', 'oneoff', 'clean-slate', 'opencloud', '--snapshot', 'latest']]
+        fail_msg: "Unexpected calls of restic-restore: {{ calls | to_json }}"
+
+    - name: Stat the restore marker
+      ansible.builtin.stat:
+        path: /var/lib/restic-restore/opencloud.done
+      register: marker
+
+    - name: Check the restore wrote its marker
+      ansible.builtin.assert:
+        that: marker.stat.exists
+        fail_msg: The clean-slate restore left no marker

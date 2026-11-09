@@ -13,7 +13,7 @@ resolves and with certificates from the private root CA.
 
 | App | Status |
 | --- | --- |
-| [OpenCloud](https://opencloud.eu/) – files, sync, sharing | planned |
+| [OpenCloud](https://opencloud.eu/) – files, sync, sharing | role `opencloud`, at `https://opencloud.<host>` |
 | [Paperless-ngx](https://docs.paperless-ngx.com/) – scanned documents, OCR, search | later |
 
 ## How it fits together
@@ -23,6 +23,50 @@ Docker, the nginx reverse proxy and its certificate, the secrets (`.env` files f
 backups. This repo only deploys the applications on top of it, the same way
 [smart-home](https://github.com/TheRealArthurDent/smart-home) does on raspi. raspberry's `bootstrap.yaml` must have
 run on the host first.
+
+## OpenCloud
+
+`opencloud/docker-compose.yaml` runs the official image (`opencloudeu/opencloud`, the stable releases) without a
+host port: raspberry's nginx terminates TLS and proxies to `opencloud:9200` over the network `siz`. The first start
+runs `opencloud init`, which creates the user `admin` with `OPENCLOUD_ADMIN_PASSWORD` and writes the generated
+secrets to the volume `opencloud_config`. Users, files and the search index live in `opencloud_data`. Both volumes
+are in the restic backup and come back by themselves on a fresh host (clean-slate restore).
+
+What raspberry has to provide on the host before the first deployment:
+
+| What | Where in raspberry |
+| --- | --- |
+| `/etc/docker/opencloud/.env` with `OPENCLOUD_ADMIN_PASSWORD` (keys in `opencloud/.env.example`) | `secrets` role, from KeePass |
+| `/etc/ssl/certs/rootCA.pem`, and `opencloud` in the certificate's SANs | `certificate_check` role (`certificate_check_subdomains`) |
+| A vhost `opencloud.<host>` that proxies to `http://opencloud:9200` (below) | `stack` role, nginx templates |
+| `opencloud.<host>` resolving to the host | `configs/pihole.yaml` |
+| The network `siz` and the helper `/usr/local/bin/restic-restore` | `stack` role |
+| `opencloud` in `stack_backup_stacks`, once the first deployment wrote its marker | `restore_items.yaml` |
+
+The nginx location (websockets for the web UI, no upload limit, long transfers). Its core, without the buffering
+and timeout lines, was tested against the container, including the services verifying the private CA:
+
+```nginx
+location / {
+    resolver 127.0.0.11;
+    set $opencloud opencloud:9200;
+    proxy_pass http://$opencloud;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    client_max_body_size 0;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
+```
+
+On a new host without a backup, the first deployment needs `-e skip_opencloud_restore=true`.
 
 ## Development
 

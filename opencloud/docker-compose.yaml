@@ -1,0 +1,65 @@
+# OpenCloud: files, sync and sharing. Based on https://github.com/opencloud-eu/opencloud-compose (docker-compose.yml
+# and external-proxy/opencloud.yml), without Traefik: raspberry's nginx terminates TLS and proxies to port 9200.
+#
+# The opencloud role copies this file to the host and runs it as project "opencloud" with two env files:
+#   settings.env  rendered by the role (OPENCLOUD_URL)
+#   .env          rendered by raspberry's secrets role from KeePass (keys in opencloud/.env.example)
+services:
+  opencloud:
+    container_name: opencloud
+    hostname: opencloud
+    image: opencloudeu/opencloud:7.2.4
+    # The image's own user; it owns the files in both volumes.
+    user: "1000:1000"
+    restart: unless-stopped
+    # `opencloud init` writes /etc/opencloud/opencloud.yaml with random secrets on the first start and fails on every
+    # later one because the file exists, so its error is ignored.
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "opencloud init || true; exec opencloud server"]
+    environment:
+      OC_URL: ${OPENCLOUD_URL}
+      OC_LOG_LEVEL: info
+      # nginx terminates TLS and talks plain HTTP to the proxy service
+      PROXY_TLS: "false"
+      PROXY_HTTP_ADDR: 0.0.0.0:9200
+      # The health endpoints of the proxy service, for the healthcheck
+      PROXY_DEBUG_ADDR: 127.0.0.1:9205
+      # The services call OC_URL themselves (OpenID Connect through nginx), whose certificate comes from the private
+      # root CA mounted below, so they verify it instead of running insecure.
+      OC_INSECURE: "false"
+      # Only used by `opencloud init` on the first start; change the password in the web UI afterwards.
+      IDM_ADMIN_PASSWORD: ${OPENCLOUD_ADMIN_PASSWORD}
+      IDM_CREATE_DEMO_USERS: "false"
+      OC_DEFAULT_LANGUAGE: de
+      FRONTEND_CHECK_FOR_UPDATES: "false"
+      # Shares need a password; there are no guests from outside (no internet exposure)
+      OC_SHARING_PUBLIC_SHARE_MUST_HAVE_PASSWORD: "true"
+      OC_ENABLE_GUEST_LINKS: "false"
+    volumes:
+      - config:/etc/opencloud
+      - data:/var/lib/opencloud
+      # Go reads every certificate in /etc/ssl/certs, so this adds the root CA to the image's own ones.
+      - /etc/ssl/certs/rootCA.pem:/etc/ssl/certs/rootCA.pem:ro
+    networks:
+      - siz
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9205/readyz"]
+      interval: 30s
+      timeout: 5s
+      # The first start initializes the config and the user database
+      start_period: 2m
+      start_interval: 5s
+    logging:
+      driver: local
+
+volumes:
+  # opencloud.yaml with the secrets `opencloud init` generated; without it the data can't be read
+  config:
+  # Users, spaces, files, the search index and NATS
+  data:
+
+networks:
+  # raspberry's network of the nginx reverse proxy
+  siz:
+    name: siz
+    external: true
