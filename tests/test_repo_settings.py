@@ -1,4 +1,4 @@
-"""The repository settings in .github/repo-settings.json are applied by scripts/repo-settings.sh.
+"""The repository settings in .github/repo-settings.json are applied by scripts/github-settings.sh.
 
 The file is sent as is to `PATCH /repos/{owner}/{repo}`, so it may only hold fields that endpoint accepts.
 """
@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS = ROOT / ".github" / "repo-settings.json"
-SCRIPT = ROOT / "scripts" / "repo-settings.sh"
+SCRIPT = ROOT / "scripts" / "github-settings.sh"
 
 # Fields of PATCH /repos/{owner}/{repo} this repo manages.
 KNOWN_FIELDS = {
@@ -54,3 +54,8 @@ def test_secret_scanning_with_push_protection():
 
 def test_script_targets_this_repo():
     assert 'REPO="${REPO:-TheRealArthurDent/private-cloud}"' in SCRIPT.read_text()
+
+
+def test_one_script_for_all_github_settings():
+    """Rulesets and repository settings share scripts/github-settings.sh; no separate scripts next to it."""
+    assert sorted(p.name for p in (ROOT / "scripts").glob("*.sh")) == ["github-settings.sh"]

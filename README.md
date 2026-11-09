@@ -51,8 +51,6 @@ branches, secret scanning with push protection) in `.github/repo-settings.json`.
 after every change to those files (needs `gh` logged in as admin, and `jq`):
 
 ```sh
-scripts/rulesets.sh diff
-scripts/rulesets.sh apply
-scripts/repo-settings.sh diff
-scripts/repo-settings.sh apply
+scripts/github-settings.sh diff
+scripts/github-settings.sh apply
 ```
