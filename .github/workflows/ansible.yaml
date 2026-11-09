@@ -1,0 +1,38 @@
+name: Ansible Tests
+
+on:
+  # Feature branches are covered by their PR, so pushes only run on main (no duplicate runs).
+  push:
+    branches:
+      - main
+  # Every PR, without a paths filter: the main ruleset requires these checks, and a skipped required check
+  # would block the merge forever.
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Ansible lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yaml
+
+      - name: Run ansible-lint
+        working-directory: ansible
+        run: ansible-lint --strict

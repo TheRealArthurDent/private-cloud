@@ -1,0 +1,34 @@
+name: Review dog
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  reviewdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Spellcheck
+        uses: reviewdog/action-misspell@v1.30.2
+        with:
+          reporter: github-pr-review
+          locale: US
+
+      - name: Action lint
+        uses: reviewdog/action-actionlint@v1.80.0
+        with:
+          reporter: github-pr-review
+
+      - name: YAML lint
+        uses: reviewdog/action-yamllint@v1.25.1
+        with:
+          reporter: github-pr-review
+
+      - name: Markdown lint
+        uses: reviewdog/action-markdownlint@v0.31.4
+        with:
+          reporter: github-pr-review

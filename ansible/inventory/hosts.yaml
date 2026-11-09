@@ -1,0 +1,15 @@
+# Same host names as raspberry's inventory; raspberry's bootstrap.yaml must have run on a host first.
+all:
+  hosts:
+    dungeon:
+      ansible_host: 192.168.1.5
+      ansible_port: 22  # TODO: dungeon's SSH port
+      ansible_user: TODO  # TODO: dungeon's login user
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_become: true
+    testbed:
+      ansible_host: 192.168.1.7
+      ansible_port: 4242
+      ansible_user: testuser
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_become: true
