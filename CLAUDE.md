@@ -21,9 +21,10 @@ data and an external USB SSD for backups. The apps are reachable only from the h
 ## Layout
 
 - `ansible/` – `deploy.yaml`, `inventory/hosts.yaml`, `requirements.yaml` (collections), `ansible.cfg`
-- `tests/` – pytest tests (Claude hook, rulesets, repo hygiene, `--limit` guard)
+- `tests/` – pytest tests (Claude hook, rulesets, repository settings, repo hygiene, `--limit` guard)
 - `.claude/` – Claude Code settings and the guard hook (`hooks/guard.py`)
-- `.github/rulesets/` + `scripts/rulesets.sh` – rulesets for `main`, applied by the user (`rulesets.sh apply`)
+- `.github/rulesets/` (rulesets for `main`) + `.github/repo-settings.json` (auto merge, branch cleanup, secret
+  scanning) – GitHub settings, applied by the user with `scripts/github-settings.sh apply`
 
 ## Hosts
 
