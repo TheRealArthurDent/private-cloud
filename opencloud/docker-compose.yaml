@@ -8,7 +8,7 @@ services:
   opencloud:
     container_name: opencloud
     hostname: opencloud
-    image: opencloudeu/opencloud:7.2.4
+    image: opencloudeu/opencloud:7.2.5
     # The image's own user; it owns the files in both volumes.
     user: "1000:1000"
     restart: unless-stopped
