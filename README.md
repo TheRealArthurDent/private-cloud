@@ -38,6 +38,7 @@ What raspberry has to provide on the host before the first deployment:
 | --- | --- |
 | `/etc/docker/opencloud/.env` with `OPENCLOUD_ADMIN_PASSWORD` (keys in `opencloud/.env.example`) | `secrets` role, from KeePass |
 | `/etc/ssl/certs/rootCA.pem`, and `opencloud` in the certificate's SANs | `certificate_check` role (`certificate_check_subdomains`) |
+| A restart of the containers labelled `root-ca.restart-on-change` when the root CA changes (the bind mount keeps the old file, and OpenCloud reads its trust store only at start) | `certificate_check` role |
 | A vhost `opencloud.<host>` that proxies to `http://opencloud:9200` (below) | `stack` role, nginx templates |
 | `opencloud.<host>` resolving to the host | `configs/pihole.yaml` |
 | The network `siz` and the helper `/usr/local/bin/restic-restore` | `stack` role |

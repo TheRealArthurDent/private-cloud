@@ -12,6 +12,10 @@ services:
     # The image's own user; it owns the files in both volumes.
     user: "1000:1000"
     restart: unless-stopped
+    labels:
+      # raspberry's certificate_check role restarts this container when it replaces the root CA: the bind mount below
+      # keeps showing the old file, and the services read the trust store only at start.
+      root-ca.restart-on-change: "true"
     # `opencloud init` writes /etc/opencloud/opencloud.yaml with random secrets on the first start and fails on every
     # later one because the file exists, so its error is ignored.
     entrypoint: ["/bin/sh"]
