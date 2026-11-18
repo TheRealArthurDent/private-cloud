@@ -20,7 +20,7 @@ def test_no_env_file_is_tracked():
 
 
 def test_env_files_are_ignored():
-    for path in ("setup/.env", ".env", "opencloud/.env"):
+    for path in ("setup/.env", ".env", "opencloud/.env", "paperless/.env"):
         assert git("check-ignore", "--no-index", "-q", path).returncode == 0, f"{path} is not git-ignored"
 
 

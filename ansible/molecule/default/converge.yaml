@@ -4,5 +4,7 @@
   vars:
     # No Docker daemon runs inside the test container.
     opencloud_manage_containers: false
+    paperless_manage_containers: false
   roles:
     - opencloud
+    - paperless

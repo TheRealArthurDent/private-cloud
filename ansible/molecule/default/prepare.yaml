@@ -23,6 +23,26 @@
         mode: '0600'
       no_log: true
 
+    - name: Create the config directory of Paperless like infrastructure's secrets role does
+      ansible.builtin.file:
+        path: /etc/docker/paperless
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create the secrets file of Paperless like infrastructure's secrets role does
+      ansible.builtin.copy:
+        content: |
+          PAPERLESS_SECRET_KEY='LEAKCANARY-paperless-secret-key'
+          PAPERLESS_DB_PASSWORD='LEAKCANARY-paperless-db tes$abc #c'
+          PAPERLESS_ADMIN_PASSWORD='LEAKCANARY-paperless-admin'
+        dest: /etc/docker/paperless/.env
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
     - name: Create the root CA like raspberry's certificate_check role does
       ansible.builtin.copy:
         content: |

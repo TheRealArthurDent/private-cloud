@@ -1,15 +1,16 @@
 # private-cloud – OpenCloud and Paperless on Raspberry Pi
 
-Docker Compose stack for the private cloud: OpenCloud (files, sync, sharing) and later Paperless-ngx (documents,
+Docker Compose stack for the private cloud: OpenCloud (files, sync, sharing) and Paperless-ngx (documents, mails,
 OCR). It runs on `dungeon`, a Raspberry Pi 5 (8 GB, Debian/Raspberry Pi OS trixie, arm64) with an NVMe SSD for the
 data and an external USB SSD for backups. The apps are reachable only from the home network and through WireGuard
 (DNS through Pi-hole, certificates from the private root CA), never exposed to the internet.
 
 ## State of the repo
 
-- **OpenCloud** is the first app: `opencloud/docker-compose.yaml` (copied to the host as it is, project
-  `opencloud`) and the role `ansible/roles/opencloud`, tested with Molecule. Paperless comes next. Each app gets
-  its own directory, role and Compose project.
+- **OpenCloud** (`opencloud/`, role `opencloud`) and **Paperless-ngx** (`paperless/`, role `paperless`, with
+  Postgres, Valkey, Gotenberg and Tika) are the apps. Each app gets its own directory, role and Compose project; the
+  compose file is copied to the host as it is. Paperless' hardening (non-root, internal network, Gotenberg flags)
+  is checked by `tests/test_paperless_compose.py`; keep it when changing the stack.
 - The README's OpenCloud section lists what raspberry must provide on the host (secrets key, SAN, nginx vhost,
   Pi-hole record, `stack_backup_stacks`); keep it in sync when the role's assumptions change.
 - **raspberry provides what this stack depends on**, as it does for smart-home on raspi: host setup, Docker, the
@@ -22,9 +23,9 @@ data and an external USB SSD for backups. The apps are reachable only from the h
 
 ## Layout
 
-- `opencloud/` – `docker-compose.yaml` and `.env.example` (keys of the secrets file, without values)
-- `ansible/` – `deploy.yaml`, `inventory/hosts.yaml`, `requirements.yaml` (collections), `ansible.cfg`, the role
-  `roles/opencloud` and its Molecule scenario `molecule/default/`
+- `opencloud/`, `paperless/` – `docker-compose.yaml` and `.env.example` (keys of the secrets file, without values)
+- `ansible/` – `deploy.yaml`, `inventory/hosts.yaml`, `requirements.yaml` (collections), `ansible.cfg`, the roles
+  `roles/opencloud` and `roles/paperless` and their Molecule scenario `molecule/default/`
 - `tests/` – pytest tests (compose file, restore volumes, Claude hook, rulesets, repository settings, repo hygiene,
   `--limit` guard)
 - `.claude/` – Claude Code settings and the guard hook (`hooks/guard.py`)

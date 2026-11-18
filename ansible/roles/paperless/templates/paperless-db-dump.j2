@@ -1,0 +1,13 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Dumps the Paperless database into the volume dbdump, before the nightly restic backup. Postgres imports this
+# file when it starts on an empty data directory (paperless/docker-compose.yaml). The file is replaced only by a
+# complete dump, so a failed run leaves the previous one in place for the backup.
+set -euo pipefail
+dir={{ paperless_docker_volumes_dir }}/{{ paperless_project_name }}_dbdump/_data
+# Postgres' entrypoint runs only *.sh, *.sql and *.sql.{gz,xz,zst}, so it ignores the temporary file.
+tmp="$dir/.{{ paperless_db_dump_file }}.tmp"
+trap 'rm -f "$tmp"' EXIT
+docker exec {{ paperless_db_container }} pg_dump --username=paperless --dbname=paperless | gzip > "$tmp"
+chmod 0644 "$tmp"
+mv "$tmp" "$dir/{{ paperless_db_dump_file }}"

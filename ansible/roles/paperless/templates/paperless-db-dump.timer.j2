@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Dump the Paperless database every night before the backup
+
+[Timer]
+OnCalendar=*-*-* {{ paperless_db_dump_time }}:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

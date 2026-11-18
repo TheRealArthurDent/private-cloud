@@ -14,7 +14,7 @@ resolves and with certificates from the private root CA.
 | App | Status |
 | --- | --- |
 | [OpenCloud](https://opencloud.eu/) – files, sync, sharing | role `opencloud`, at `https://opencloud.<host>` |
-| [Paperless-ngx](https://docs.paperless-ngx.com/) – scanned documents, OCR, search | later |
+| [Paperless-ngx](https://docs.paperless-ngx.com/) – scanned documents and mails, OCR, search | role `paperless`, at `https://paperless.<host>` |
 
 ## How it fits together
 
@@ -68,6 +68,76 @@ location / {
 ```
 
 On a new host without a backup, the first deployment needs `-e skip_opencloud_restore=true`.
+
+## Paperless-ngx
+
+`paperless/docker-compose.yaml` runs five containers as the Compose project `paperless`:
+
+| Service | Image | Purpose |
+| --- | --- | --- |
+| `webserver` | `ghcr.io/paperless-ngx/paperless-ngx` | Web UI, consumer, OCR, mail fetching |
+| `db` | `postgres` (alpine) | Database |
+| `broker` | `valkey/valkey` (alpine) | Task queue, nothing on disk |
+| `gotenberg` | `gotenberg/gotenberg` | HTML mails (Chromium) and office files (LibreOffice) to PDF |
+| `tika` | `apache/tika` | Text and metadata of office files and mails |
+
+Every container runs as a non-root user without capabilities, with memory and PID limits; all but the webserver
+have a read-only root file system. Database, broker and parsers sit on the internal network `backend` without
+internet access. Only the webserver joins `siz` (nginx proxies to `paperless-webserver:8000`) and `outbound`, and
+resolves names through infrastructure's outbound Pi-hole, which allows only the IMAP server of the mail account.
+Gotenberg runs without JavaScript and refuses to fetch any URL (private or public).
+
+Settings worth knowing before the first document: OCR in `deu+eng`, file names
+`{{ created_year }}/{{ correspondent }}/{{ title }}` (changing this later renames every file), one task worker
+with two threads. The user `admin` is created on the first start with `PAPERLESS_ADMIN_PASSWORD`; personal accounts,
+the mail account and the mail rules are set up in the web UI and live in the database, not in this repo. Mail rules
+read one dedicated folder or account, not a whole inbox.
+
+### Backup and restore
+
+The live database volume `paperless_pgdata` is not backed up. A systemd timer (`paperless-db-dump.timer`, 02:45)
+writes `pg_dump` into the volume `paperless_dbdump` before resticprofile's run at 03:00; a failed dump keeps the
+previous file. On a fresh host the clean-slate restore brings back `data`, `media`, `consume`, `export` and
+`dbdump`, and Postgres imports `paperless.sql.gz` on its first start, before it accepts connections and before
+the webserver starts. The same happens whenever `paperless_pgdata` is removed.
+
+A Postgres major upgrade uses the same path: Postgres 18+ keeps its data in a directory per major version, so a new
+major starts empty and imports the dump. Run `sudo systemctl start paperless-db-dump.service` right before the
+deployment, so the dump is current; Renovate opens these PRs only after approval in the dependency dashboard.
+
+What infrastructure has to provide on the host before the first deployment:
+
+| What | Where in infrastructure |
+| --- | --- |
+| `/etc/docker/paperless/.env` with the keys in `paperless/.env.example` | `secrets` role, from KeePass |
+| `paperless` in the certificate's SANs | `certificate_check` role (`certificate_check_subdomains`) |
+| A vhost `paperless.<host>` that proxies to `http://paperless-webserver:8000` (below) | `reverse_proxy` role |
+| `paperless.<host>` resolving to the host | `configs/pihole.yaml` |
+| The networks `siz` and `outbound`, and the helper `/usr/local/bin/restic-restore` | `stack` role |
+| The IMAP server of the mail account allowed in the outbound Pi-hole | `configs/pihole.yaml` |
+| `/source/docker-volumes/paperless_pgdata` excluded from the backup | `resticprofile` role, `excludes.j2` |
+| `paperless` in `stack_backup_stacks`, once the first deployment wrote its marker | `restore_items.yaml` |
+
+The nginx location (websockets for the status updates, large uploads):
+
+```nginx
+location / {
+    resolver 127.0.0.11;
+    set $paperless paperless-webserver:8000;
+    proxy_pass http://$paperless;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    client_max_body_size 100M;
+    proxy_read_timeout 300s;
+}
+```
+
+On a new host without a backup, the first deployment needs `-e skip_paperless_restore=true`.
 
 ## Development
 

@@ -1,4 +1,4 @@
-# Deploys the private cloud stack. raspberry's bootstrap.yaml must have run on the host.
+# Deploys the private cloud stack. infrastructure's bootstrap.yaml must have run on the host.
 # ansible-playbook deploy.yaml --limit testbed --check --diff
 - name: Require --limit
   hosts: localhost
@@ -25,10 +25,11 @@
         quiet: true
       tags: always
 
-# One role per app; paperless follows in its own PR.
+# One role per app, each its own Compose project.
 - name: Deploy the private cloud stack
   hosts: all
   become: true
   gather_facts: false
   roles:
     - opencloud
+    - paperless

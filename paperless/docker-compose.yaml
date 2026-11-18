@@ -1,0 +1,222 @@
+# Paperless-ngx: scanned documents and mails, OCR, full-text search. Based on upstream's
+# docker/compose/docker-compose.postgres-tika.yml, without a host port: infrastructure's nginx terminates TLS and
+# proxies to the webserver over the network siz.
+#
+# The paperless role copies this file to the host and runs it as project "paperless" with two env files:
+#   settings.env  rendered by the role (PAPERLESS_URL)
+#   .env          rendered by infrastructure's secrets role from KeePass (keys in paperless/.env.example)
+#
+# Hardening (private-cloud#15): every container runs as a non-root user without capabilities. The parsers
+# (Gotenberg, Tika) and the backends (Postgres, Valkey) are only on the internal network backend, without internet
+# access. Only the webserver joins siz (nginx) and outbound (IMAP, through the outbound Pi-hole's DNS filter).
+services:
+  webserver:
+    container_name: paperless-webserver
+    hostname: paperless
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.4.2
+    # Rootless: s6 starts directly as the image's user paperless, which owns the volumes' directories in the image.
+    # Upstream doesn't support it together with PAPERLESS_OCR_LANGUAGES; deu and eng are in the image.
+    user: "1000:1000"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+      tika:
+        condition: service_started
+    environment:
+      PAPERLESS_URL: ${PAPERLESS_URL}
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      # Created on the first start only; later changes of the password in KeePass don't reach Paperless.
+      PAPERLESS_ADMIN_USER: admin
+      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD}
+      PAPERLESS_DBENGINE: postgresql
+      PAPERLESS_DBHOST: db
+      PAPERLESS_DBNAME: paperless
+      PAPERLESS_DBUSER: paperless
+      PAPERLESS_DBPASS: ${PAPERLESS_DB_PASSWORD}
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_TIKA_ENABLED: "true"
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_OCR_LANGUAGE: deu+eng
+      PAPERLESS_TIME_ZONE: Europe/Berlin
+      # Set before the first document: changing it later renames every stored file.
+      PAPERLESS_FILENAME_FORMAT: "{{ created_year }}/{{ correspondent }}/{{ title }}"
+      # The Pi is shared with OpenCloud: one document at a time, two pages of it in parallel.
+      PAPERLESS_TASK_WORKERS: "1"
+      PAPERLESS_THREADS_PER_WORKER: "2"
+      PAPERLESS_WEBSERVER_WORKERS: "1"
+    volumes:
+      - data:/usr/src/paperless/data
+      - media:/usr/src/paperless/media
+      - consume:/usr/src/paperless/consume
+      - export:/usr/src/paperless/export
+    networks:
+      - backend
+      - siz
+      - outbound
+    # infrastructure's outbound Pi-hole: denies every domain but the allowed ones (the IMAP server). Docker's
+    # embedded DNS still answers the names of the other services.
+    dns:
+      - 172.30.1.153
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # OCR of a large scan (Ghostscript, Tesseract, OCRmyPDF) runs here
+    mem_limit: 2g
+    pids_limit: 512
+    # The image's healthcheck: curl against the webserver on port 8000
+    logging:
+      driver: local
+
+  db:
+    container_name: paperless-db
+    image: postgres:18.7-alpine
+    # The image's user postgres on Alpine
+    user: "70:70"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paperless
+      POSTGRES_USER: paperless
+      POSTGRES_PASSWORD: ${PAPERLESS_DB_PASSWORD}
+    volumes:
+      # Postgres 18 keeps its data in a subdirectory per major version (PGDATA=/var/lib/postgresql/18/docker).
+      # Excluded from the backup (a copy of a running database isn't consistent); the dump below replaces it.
+      - pgdata:/var/lib/postgresql
+      # The paperless role's nightly pg_dump writes paperless.sql.gz into this volume. On a new, empty database
+      # (a restored host, or after removing pgdata) the image's entrypoint imports it before Postgres starts for real.
+      - dbdump:/docker-entrypoint-initdb.d:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    networks:
+      - backend
+    # During initdb and the import, Postgres listens only on its socket: a TCP check keeps the webserver waiting.
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "paperless", "-d", "paperless"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10m
+      start_interval: 5s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 200
+    logging:
+      driver: local
+
+  broker:
+    container_name: paperless-broker
+    image: valkey/valkey:9.1.3-alpine
+    # The image's user valkey on Alpine
+    user: "999:1000"
+    restart: unless-stopped
+    # Only Paperless' task queue: nothing worth keeping on disk.
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      start_interval: 2s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: local
+
+  # Converts HTML mails (Chromium) and office files (LibreOffice) to PDF; needs both, so the full image.
+  gotenberg:
+    container_name: paperless-gotenberg
+    image: gotenberg/gotenberg:8.40.0
+    # The image's user gotenberg
+    user: "1001:1001"
+    restart: unless-stopped
+    # Flags checked against pkg/modules/{chromium,api,webhook} of the pinned version. Paperless uploads every file,
+    # so Chromium never needs to fetch anything. The default deny list (file: outside /tmp) stays, and the allow
+    # list stays empty: a match there bypasses the IP checks.
+    command:
+      - gotenberg
+      - --chromium-disable-javascript=true
+      - --chromium-deny-private-ips=true
+      - --chromium-deny-public-ips=true
+      - --api-disable-download-from=true
+      - --webhook-disable=true
+    read_only: true
+    tmpfs:
+      - /tmp
+      # Chromium's and LibreOffice's profiles and font caches
+      - /home/gotenberg
+    networks:
+      - backend
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1536m
+    pids_limit: 512
+    logging:
+      driver: local
+
+  # Extracts text and metadata from office files and mails
+  tika:
+    container_name: paperless-tika
+    image: apache/tika:3.3.3.0
+    # The image's own user
+    user: "35002:35002"
+    restart: unless-stopped
+    environment:
+      # The JVM sizes its heap from the container limit
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - backend
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 256
+    logging:
+      driver: local
+
+volumes:
+  # Search index, classifier, Paperless' own state
+  data:
+  # Originals, archived PDFs and thumbnails
+  media:
+  # Files waiting to be consumed
+  consume:
+  # Target of the document exporter
+  export:
+  # The live database; not backed up, not restored
+  pgdata:
+  # paperless.sql.gz, the nightly pg_dump; backed up and restored
+  dbdump:
+
+networks:
+  # Database, broker and parsers: no internet, no host
+  backend:
+    internal: true
+  # infrastructure's network of the nginx reverse proxy
+  siz:
+    name: siz
+    external: true
+  # infrastructure's network with internet access
+  outbound:
+    name: outbound
+    external: true
