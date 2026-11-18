@@ -1,35 +1,31 @@
 ---
-# Deploys the Paperless stack. Needs infrastructure's bootstrap on the host first: its secrets role writes
-# paperless_env_file, its stack role the networks siz and outbound and the restore helper.
+# Deploys the Paperless stack. Needs infrastructure's bootstrap on the host first: its secrets role writes the
+# secret files, its stack role the networks siz and outbound and the restore helper.
 
-- name: Stat the secrets file
+- name: Stat the secret files
   ansible.builtin.stat:
-    path: "{{ paperless_env_file }}"
-  register: paperless_env_stat
+    path: "{{ paperless_secrets_dir }}/{{ item.key }}"
+  loop: "{{ paperless_secrets | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: paperless_secret_files
 
-- name: Ensure the secrets file exists
+# Docker would create a missing file secret as an empty directory, and a file the container user can't read fails
+# at start. An empty file would give Paperless no secret key, Postgres no password and the admin none.
+- name: Ensure every secret file is there for its container user
   ansible.builtin.assert:
-    that: paperless_env_stat.stat.exists
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.uid == item.item.value
+      - item.stat.size > 0
     fail_msg: >-
-      {{ paperless_env_file }} is missing. Run infrastructure's bootstrap.yaml on {{ inventory_hostname }} first.
+      {{ paperless_secrets_dir }}/{{ item.item.key }} is missing, empty or not owned by uid {{ item.item.value }}.
+      Run infrastructure's bootstrap.yaml on {{ inventory_hostname }} first.
     quiet: true
-
-- name: Read the secrets file
-  ansible.builtin.slurp:
-    src: "{{ paperless_env_file }}"
-  register: paperless_env
-  no_log: true
-
-# Paperless refuses to start without a secret key, Postgres without a password, and the admin would get none.
-- name: Ensure every secret is set
-  ansible.builtin.assert:
-    that: >-
-      paperless_env.content | b64decode
-      | regex_search('^' ~ item ~ '=.+$', multiline=True) is not none
-    fail_msg: "{{ item }} is missing in {{ paperless_env_file }}."
-    quiet: true
-  loop: "{{ paperless_required_secrets }}"
-  no_log: true
+  loop: "{{ paperless_secret_files.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
 
 - name: Ensure the compose directory exists
   ansible.builtin.file:
@@ -127,7 +123,6 @@
     project_name: "{{ paperless_project_name }}"
     env_files:
       - "{{ paperless_settings_file }}"
-      - "{{ paperless_env_file }}"
     state: present
     pull: policy
     # Fail instead of reporting changed when a container crash-loops or stays unhealthy.

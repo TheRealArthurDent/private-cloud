@@ -13,7 +13,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ROOT / "paperless" / "docker-compose.yaml"
-ENV_EXAMPLE = ROOT / "paperless" / ".env.example"
 ROLE = ROOT / "ansible" / "roles" / "paperless"
 
 # The address of infrastructure's outbound Pi-hole on the network outbound, the egress filter by DNS
@@ -211,25 +210,49 @@ def test_the_ocr_languages_are_the_installed_ones():
     assert "PAPERLESS_OCR_LANGUAGES" not in service("webserver")["environment"]
 
 
-def test_every_variable_comes_from_an_env_file():
-    """Compose interpolates ${VAR} from settings.env (role) and .env (infrastructure's secrets role)."""
+def test_every_variable_comes_from_the_settings_file():
+    """Compose interpolates ${VAR} only from settings.env (role); no secret passes through an env file."""
     referenced = set(re.findall(r"\$\{(\w+)\}", COMPOSE.read_text()))
     settings = set(re.findall(r"^(\w+)=", (ROLE / "templates" / "settings.env.j2").read_text(), re.MULTILINE))
-    secrets = set(re.findall(r"^(\w+)=", ENV_EXAMPLE.read_text(), re.MULTILINE))
-    assert settings.isdisjoint(secrets)
-    assert referenced == settings | secrets
+    assert referenced == settings
+    assert not (ROOT / "paperless" / ".env.example").exists()
 
 
-def test_env_example_holds_no_values():
-    lines = ENV_EXAMPLE.read_text().splitlines()
-    entries = [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
-    assert entries
-    assert [line for line in entries if not re.fullmatch(r"[A-Z0-9_]+=", line)] == []
+# Compose secrets (homelab-security#1): secret -> (service, variable reading /run/secrets/<secret>, container uid)
+SECRETS = {
+    "secret_key": ("webserver", "PAPERLESS_SECRET_KEY_FILE", 1000),
+    "admin_password": ("webserver", "PAPERLESS_ADMIN_PASSWORD_FILE", 1000),
+    "db_password": ("webserver", "PAPERLESS_DBPASS_FILE", 1000),
+    "postgres_password": ("db", "POSTGRES_PASSWORD_FILE", 70),
+}
 
 
-def test_the_role_checks_every_secret():
-    secrets = re.findall(r"^(\w+)=", ENV_EXAMPLE.read_text(), re.MULTILINE)
-    assert sorted(defaults()["paperless_required_secrets"]) == sorted(secrets)
+def test_secrets_are_compose_secret_files_of_infrastructure():
+    """infrastructure's secrets role writes them from KeePass, owned by the container user that reads them."""
+    assert compose()["secrets"] == {
+        name: {"file": f"/etc/docker/paperless/secrets/{name}"} for name in SECRETS
+    }
+    assert sorted(defaults()["paperless_secrets"]) == sorted(SECRETS)
+
+
+@pytest.mark.parametrize("name", sorted(SECRETS))
+def test_each_secret_reaches_its_service_as_a_file(name):
+    svc_name, variable, uid = SECRETS[name]
+    svc = service(svc_name)
+    assert name in svc["secrets"]
+    assert svc["environment"][variable] == f"/run/secrets/{name}"
+    # Compose bind-mounts the file as it is: only its owner (the container user) can read it
+    assert str(svc["user"]).split(":")[0] == str(uid)
+    assert defaults()["paperless_secrets"][name] == uid
+
+
+def test_no_secret_value_is_in_the_environment():
+    for name, svc in services().items():
+        environment = svc.get("environment", {})
+        for key in ("PAPERLESS_SECRET_KEY", "PAPERLESS_ADMIN_PASSWORD", "PAPERLESS_DBPASS", "POSTGRES_PASSWORD"):
+            assert key not in environment, f"{name}: {key}"
+    assert set(service("broker").get("secrets", [])) == set()
+    assert "secrets" not in service("gotenberg") and "secrets" not in service("tika")
 
 
 def test_compose_up_fails_on_a_container_that_doesnt_come_up():

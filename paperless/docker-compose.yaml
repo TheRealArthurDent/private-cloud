@@ -2,9 +2,10 @@
 # docker/compose/docker-compose.postgres-tika.yml, without a host port: infrastructure's nginx terminates TLS and
 # proxies to the webserver over the network siz.
 #
-# The paperless role copies this file to the host and runs it as project "paperless" with two env files:
-#   settings.env  rendered by the role (PAPERLESS_URL)
-#   .env          rendered by infrastructure's secrets role from KeePass (keys in paperless/.env.example)
+# The paperless role copies this file to the host and runs it as project "paperless" with the env file settings.env
+# (PAPERLESS_URL, rendered by the role). The secrets are Compose secrets (homelab-security#1): files that
+# infrastructure's secrets role writes from KeePass to /etc/docker/paperless/secrets/, which the containers read at
+# /run/secrets/<name> through *_FILE variables. They aren't interpolated, quoted or shown by docker inspect.
 #
 # Hardening (private-cloud#15): every container runs as a non-root user without capabilities. The parsers
 # (Gotenberg, Tika) and the backends (Postgres, Valkey) are only on the internal network backend, without internet
@@ -27,17 +28,22 @@ services:
         condition: service_started
       tika:
         condition: service_started
+    # Paperless' init copies each PAPERLESS_*_FILE into its variable at start, byte for byte.
+    secrets:
+      - secret_key
+      - admin_password
+      - db_password
     environment:
       PAPERLESS_URL: ${PAPERLESS_URL}
-      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      PAPERLESS_SECRET_KEY_FILE: /run/secrets/secret_key
       # Created on the first start only; later changes of the password in KeePass don't reach Paperless.
       PAPERLESS_ADMIN_USER: admin
-      PAPERLESS_ADMIN_PASSWORD: ${PAPERLESS_ADMIN_PASSWORD}
+      PAPERLESS_ADMIN_PASSWORD_FILE: /run/secrets/admin_password
       PAPERLESS_DBENGINE: postgresql
       PAPERLESS_DBHOST: db
       PAPERLESS_DBNAME: paperless
       PAPERLESS_DBUSER: paperless
-      PAPERLESS_DBPASS: ${PAPERLESS_DB_PASSWORD}
+      PAPERLESS_DBPASS_FILE: /run/secrets/db_password
       PAPERLESS_REDIS: redis://broker:6379
       PAPERLESS_TIKA_ENABLED: "true"
       PAPERLESS_TIKA_ENDPOINT: http://tika:9998
@@ -79,10 +85,14 @@ services:
     # The image's user postgres on Alpine
     user: "70:70"
     restart: unless-stopped
+    # The same password as db_password, in a file of its own: each secret file belongs to the user reading it.
+    secrets:
+      - postgres_password
     environment:
       POSTGRES_DB: paperless
       POSTGRES_USER: paperless
-      POSTGRES_PASSWORD: ${PAPERLESS_DB_PASSWORD}
+      # Sets the password on the first start (initdb) only
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     volumes:
       # Postgres 18 keeps its data in a subdirectory per major version (PGDATA=/var/lib/postgresql/18/docker).
       # Excluded from the backup (a copy of a running database isn't consistent); the dump below replaces it.
@@ -193,6 +203,18 @@ services:
     pids_limit: 256
     logging:
       driver: local
+
+# Written by infrastructure's secrets role from KeePass (group Paperless). Compose bind-mounts each file as it is, so
+# it belongs to the user of the container reading it, mode 0400 (paperless_secrets in the role's defaults).
+secrets:
+  secret_key:
+    file: /etc/docker/paperless/secrets/secret_key
+  admin_password:
+    file: /etc/docker/paperless/secrets/admin_password
+  db_password:
+    file: /etc/docker/paperless/secrets/db_password
+  postgres_password:
+    file: /etc/docker/paperless/secrets/postgres_password
 
 volumes:
   # Search index, classifier, Paperless' own state

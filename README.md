@@ -109,7 +109,7 @@ What infrastructure has to provide on the host before the first deployment:
 
 | What | Where in infrastructure |
 | --- | --- |
-| `/etc/docker/paperless/.env` with the keys in `paperless/.env.example` | `secrets` role, from KeePass |
+| The Compose secret files `secret_key`, `admin_password`, `db_password` (owner uid 1000) and `postgres_password` (uid 70) in `/etc/docker/paperless/secrets/`, mode 0400 | `secrets` role (`secrets_paperless`), from KeePass |
 | `paperless` in the certificate's SANs | `certificate_check` role (`certificate_check_subdomains`) |
 | A vhost `paperless.<host>` that proxies to `http://paperless-webserver:8000` (below) | `reverse_proxy` role |
 | `paperless.<host>` resolving to the host | `configs/pihole.yaml` |

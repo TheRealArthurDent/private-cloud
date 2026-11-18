@@ -23,7 +23,8 @@ data and an external USB SSD for backups. The apps are reachable only from the h
 
 ## Layout
 
-- `opencloud/`, `paperless/` – `docker-compose.yaml` and `.env.example` (keys of the secrets file, without values)
+- `opencloud/`, `paperless/` – `docker-compose.yaml`; OpenCloud also `.env.example` (keys of its secrets file,
+  without values). Paperless reads its secrets as Compose secret files (homelab-security#1), no `.env`.
 - `ansible/` – `deploy.yaml`, `inventory/hosts.yaml`, `requirements.yaml` (collections), `ansible.cfg`, the roles
   `roles/opencloud` and `roles/paperless` and their Molecule scenario `molecule/default/`
 - `tests/` – pytest tests (compose file, restore volumes, Claude hook, rulesets, repository settings, repo hygiene,
@@ -53,7 +54,9 @@ settings themselves. Don't work around a block; give the user the command or the
 Passwords live in KeePass and reach the Pi as `.env` files through raspberry's `secrets` role; this repo has no
 KeePass access of its own. Never commit a `.env` file, never read or print one, and never put secret values into
 config files in this repo; reference `${VAR}` from the env file instead. Each app documents its keys in an
-`.env.example` without values. Tasks that handle secret values need `no_log: true`.
+`.env.example` without values; new apps use Compose secrets instead (files below `/etc/docker/<app>/secrets/`,
+owned by the container user, read through `*_FILE` variables), like Paperless. Tasks that handle secret values need
+`no_log: true`.
 
 ## Commands
 

@@ -1,12 +1,15 @@
 ---
-# Config of the Paperless stack lives below this directory. infrastructure's secrets role writes the .env here.
+# Config of the Paperless stack lives below this directory. infrastructure's secrets role writes the secrets here.
 paperless_dir: /etc/docker/paperless
-paperless_env_file: "{{ paperless_dir }}/.env"
-# Keys the stack needs from the secrets file (paperless/.env.example, tests/test_paperless_compose.py)
-paperless_required_secrets:
-  - PAPERLESS_SECRET_KEY
-  - PAPERLESS_DB_PASSWORD
-  - PAPERLESS_ADMIN_PASSWORD
+# Compose secrets (docker-compose.yaml, homelab-security#1): file name in paperless_secrets_dir -> the uid that must
+# own it, the user of the container reading it. infrastructure's secrets role writes them (secrets_paperless_uid,
+# secrets_paperless_postgres_uid there); change both repos together.
+paperless_secrets_dir: "{{ paperless_dir }}/secrets"
+paperless_secrets:
+  secret_key: 1000
+  admin_password: 1000
+  db_password: 1000
+  postgres_password: 70
 # Settings without secrets, rendered by this role (templates/settings.env.j2)
 paperless_settings_file: "{{ paperless_dir }}/settings.env"
 paperless_project_name: paperless
