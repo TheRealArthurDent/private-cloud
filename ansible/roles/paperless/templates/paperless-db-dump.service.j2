@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Dump the Paperless database before the backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ paperless_db_dump_script }}

@@ -92,8 +92,8 @@
         calls: "{{ restore_calls.content | b64decode | trim | split('\n') | map('from_json') | list }}"
       ansible.builtin.assert:
         that:
-          - calls | length >= 1
-          - calls | unique == [['--runner', 'oneoff', 'clean-slate', 'opencloud', '--snapshot', 'latest']]
+          - calls | select('contains', 'opencloud') | unique
+            == [['--runner', 'oneoff', 'clean-slate', 'opencloud', '--snapshot', 'latest']]
         fail_msg: "Unexpected calls of restic-restore: {{ calls | to_json }}"
 
     - name: Stat the restore marker
@@ -105,3 +105,139 @@
       ansible.builtin.assert:
         that: marker.stat.exists
         fail_msg: The clean-slate restore left no marker
+
+    # Paperless
+    - name: Stat the Paperless compose file
+      ansible.builtin.stat:
+        path: /etc/docker/paperless/compose/docker-compose.yaml
+        checksum_algorithm: sha1
+      register: paperless_compose_file
+
+    - name: Check the Paperless compose file is a copy of the repo's
+      ansible.builtin.assert:
+        that:
+          - paperless_compose_file.stat.exists
+          - paperless_compose_file.stat.pw_name == 'root'
+          - paperless_compose_file.stat.mode == '0644'
+          - >-
+            paperless_compose_file.stat.checksum
+            == lookup('ansible.builtin.file', repo_dir ~ '/paperless/docker-compose.yaml', rstrip=false) | hash('sha1')
+        fail_msg: The deployed compose file is missing or differs from paperless/docker-compose.yaml
+
+    - name: Stat the Paperless compose directory
+      ansible.builtin.stat:
+        path: /etc/docker/paperless/compose
+      register: paperless_compose_dir
+
+    - name: Check the Paperless compose directory gives the world no access
+      ansible.builtin.assert:
+        that:
+          - paperless_compose_dir.stat.isdir
+          - paperless_compose_dir.stat.pw_name == 'root'
+          - paperless_compose_dir.stat.mode == '0750'
+        fail_msg: "/etc/docker/paperless/compose is {{ paperless_compose_dir.stat.mode }}, expected 0750"
+
+    - name: Read the Paperless settings file
+      ansible.builtin.slurp:
+        src: /etc/docker/paperless/settings.env
+      register: paperless_settings_file
+
+    - name: Check the Paperless settings file holds the URL of the nginx vhost
+      vars:
+        settings: "{{ paperless_settings_file.content | b64decode }}"
+      ansible.builtin.assert:
+        that: settings is search('(?m)^PAPERLESS_URL=https://paperless\.dungeon-trixie$')
+        fail_msg: "Unexpected settings.env: {{ settings }}"
+
+    - name: Read the restore items of the Paperless stack
+      ansible.builtin.slurp:
+        src: /etc/restic-restore/stacks/paperless.json
+      register: paperless_restore_items_file
+
+    - name: Check the restore helper gets Paperless' volumes but not the live database
+      vars:
+        items: "{{ (paperless_restore_items_file.content | b64decode | from_json)['items'] }}"
+        volumes: /var/lib/docker/volumes
+      ansible.builtin.assert:
+        that:
+          - items | list | sort == ['consume', 'data', 'dbdump', 'export', 'media']
+          - items['media'].paths == [volumes ~ '/paperless_media/_data']
+          - items['dbdump'].paths == [volumes ~ '/paperless_dbdump/_data']
+          - items['media'].containers == ['paperless-webserver']
+          - items['dbdump'].containers == ['paperless-db']
+        fail_msg: "/etc/restic-restore/stacks/paperless.json is wrong: {{ items | to_json }}"
+
+    - name: Read the calls of the restore helper stub for Paperless
+      ansible.builtin.slurp:
+        src: /var/log/restic-restore-stub.log
+      register: paperless_restore_calls
+
+    - name: Check the role ran the clean-slate restore of Paperless from the latest snapshot
+      vars:
+        calls: "{{ paperless_restore_calls.content | b64decode | trim | split('\n') | map('from_json') | list }}"
+      ansible.builtin.assert:
+        that:
+          - calls | select('contains', 'paperless') | unique
+            == [['--runner', 'oneoff', 'clean-slate', 'paperless', '--snapshot', 'latest']]
+        fail_msg: "Unexpected calls of restic-restore: {{ calls | to_json }}"
+
+    - name: Stat the Paperless restore marker
+      ansible.builtin.stat:
+        path: /var/lib/restic-restore/paperless.done
+      register: paperless_marker
+
+    - name: Check the Paperless restore wrote its marker
+      ansible.builtin.assert:
+        that: paperless_marker.stat.exists
+        fail_msg: The clean-slate restore of Paperless left no marker
+
+    - name: Stat the database dump script
+      ansible.builtin.stat:
+        path: /usr/local/sbin/paperless-db-dump
+      register: paperless_dump_script
+
+    - name: Read the database dump script
+      ansible.builtin.slurp:
+        src: /usr/local/sbin/paperless-db-dump
+      register: paperless_dump_script_content
+
+    - name: Check the dump script writes a complete dump into the volume Postgres imports from
+      vars:
+        script: "{{ paperless_dump_script_content.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - paperless_dump_script.stat.pw_name == 'root'
+          - paperless_dump_script.stat.mode == '0755'
+          - script is search('set -euo pipefail')
+          - script is search('docker exec paperless-db pg_dump --username=paperless --dbname=paperless \| gzip')
+          - script is search('dir=/var/lib/docker/volumes/paperless_dbdump/_data')
+          - script is search('mv "\$tmp" "\$dir/paperless\.sql\.gz"')
+        fail_msg: "Unexpected dump script: {{ script }}"
+
+    - name: Check the dump script is valid bash
+      ansible.builtin.command:
+        argv: [bash, -n, /usr/local/sbin/paperless-db-dump]
+      changed_when: false
+
+    - name: Read the timer of the database dump
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/paperless-db-dump.timer
+      register: paperless_dump_timer
+
+    - name: Read the service of the database dump
+      ansible.builtin.slurp:
+        src: /etc/systemd/system/paperless-db-dump.service
+      register: paperless_dump_service
+
+    # infrastructure's resticprofile backs up at 03:00
+    - name: Check the dump runs every night before the backup
+      vars:
+        timer: "{{ paperless_dump_timer.content | b64decode }}"
+        unit: "{{ paperless_dump_service.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - timer is search('(?m)^OnCalendar=\*-\*-\* 02:45:00$')
+          - timer is search('(?m)^WantedBy=timers\.target$')
+          - unit is search('(?m)^ExecStart=/usr/local/sbin/paperless-db-dump$')
+          - unit is search('(?m)^Type=oneshot$')
+        fail_msg: "Unexpected units: {{ timer }} {{ unit }}"

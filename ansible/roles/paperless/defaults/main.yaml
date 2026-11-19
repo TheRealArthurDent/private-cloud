@@ -1,0 +1,79 @@
+---
+# Config of the Paperless stack lives below this directory. infrastructure's secrets role writes the secrets here.
+paperless_dir: /etc/docker/paperless
+# Compose secrets (docker-compose.yaml, homelab-security#1): file name in paperless_secrets_dir -> the uid that must
+# own it, the user of the container reading it. infrastructure's secrets role writes them (secrets_paperless_uid,
+# secrets_paperless_postgres_uid there); change both repos together.
+paperless_secrets_dir: "{{ paperless_dir }}/secrets"
+paperless_secrets:
+  secret_key: 1000
+  admin_password: 1000
+  db_password: 1000
+  postgres_password: 70
+# Settings without secrets, rendered by this role (templates/settings.env.j2)
+paperless_settings_file: "{{ paperless_dir }}/settings.env"
+paperless_project_name: paperless
+# docker-compose.yaml, copied from the repo as it is
+paperless_compose_dir: "{{ paperless_dir }}/compose"
+# The repo checkout the role copies the stack from
+paperless_repo_dir: "{{ (role_path | realpath) ~ '/../../..' }}"
+# The URL of infrastructure's nginx vhost paperless.<host>, which Pi-hole resolves and whose certificate comes from
+# the private root CA. Paperless derives its allowed hosts and CSRF origins from it.
+paperless_url: https://paperless.{{ inventory_hostname }}
+# Seconds `compose up` waits for the containers to be healthy; the first start migrates the database, and a
+# restored host imports the dump first.
+paperless_wait_timeout: 900
+# Compose up and the systemd timer need a running Docker daemon and systemd (false in Molecule).
+paperless_manage_containers: true
+# The networks of infrastructure the webserver joins
+paperless_external_networks: [siz, outbound]
+
+# Nightly dump of the database (pg_dump), before infrastructure's resticprofile backup at 03:00. The live database
+# volume is excluded from the backup; on an empty database the dump is imported on the first start
+# (docker-compose.yaml, volume dbdump).
+paperless_db_dump_time: "02:45"
+paperless_db_dump_file: paperless.sql.gz
+paperless_db_dump_script: /usr/local/sbin/paperless-db-dump
+paperless_db_container: paperless-db
+
+# Clean-slate restore before the stack starts on a fresh host, the same way as opencloud: infrastructure installs
+# the helper /usr/local/bin/restic-restore; this role lists the stack's volumes for it and calls it before compose
+# up. The helper restores only when every listed volume is empty and writes /var/lib/restic-restore/paperless.done,
+# so a host that already has data only gets the marker.
+# -e skip_paperless_restore=true (a new host with nothing to restore) only writes the marker;
+# -e paperless_restore_snapshot=<id> restores another snapshot than the latest.
+paperless_skip_restore: "{{ skip_paperless_restore | default(false) }}"
+paperless_restore_snapshot: latest
+paperless_restore_helper: /usr/local/bin/restic-restore
+# Where Docker keeps the named volumes; the backup covers it
+paperless_docker_volumes_dir: /var/lib/docker/volumes
+# Named volumes of paperless/docker-compose.yaml that hold state not coming from IaC (tests/test_restore_volumes.py):
+#   services: the services mounting the volume; their containers are stopped during a targeted restore
+#   preserve: files inside the volume (globs, relative to it) that infrastructure's backup excludes (excludes.j2)
+paperless_restore_volumes:
+  data:
+    services: [webserver]
+    preserve: []
+    note: Search index, classifier and Paperless' own state
+  media:
+    services: [webserver]
+    preserve: []
+    note: Originals, archived PDFs and thumbnails of every document
+  consume:
+    services: [webserver]
+    preserve: []
+    note: Files that were waiting to be consumed
+  export:
+    services: [webserver]
+    preserve: []
+    note: The last run of the document exporter, if any
+  dbdump:
+    services: [db]
+    preserve: []
+    note: >-
+      The nightly pg_dump of the database; the empty database imports it on its first start after the restore
+# Named volumes that are not restored, and why
+paperless_unrestored_volumes:
+  pgdata: >-
+    The live database, excluded from the backup (infrastructure's excludes.j2): a copy of running Postgres files
+    isn't consistent. It comes back from the volume dbdump.

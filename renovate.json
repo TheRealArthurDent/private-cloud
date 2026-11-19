@@ -41,6 +41,19 @@
         "molecule",
         "molecule-plugins"
       ]
+    },
+    {
+      "description": "A new Postgres major can't read the old data directory: the upgrade goes through a fresh dump (README, Paperless). Only create the PR on approval in the dependency dashboard.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
     }
   ]
 }

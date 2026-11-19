@@ -1,0 +1,134 @@
+---
+# Deploys the Paperless stack. Needs infrastructure's bootstrap on the host first: its secrets role writes the
+# secret files, its stack role the networks siz and outbound and the restore helper.
+
+- name: Stat the secret files
+  ansible.builtin.stat:
+    path: "{{ paperless_secrets_dir }}/{{ item.key }}"
+  loop: "{{ paperless_secrets | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: paperless_secret_files
+
+# Docker would create a missing file secret as an empty directory, and a file the container user can't read fails
+# at start. An empty file would give Paperless no secret key, Postgres no password and the admin none.
+- name: Ensure every secret file is there for its container user
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+      - item.stat.uid == item.item.value
+      - item.stat.size > 0
+    fail_msg: >-
+      {{ paperless_secrets_dir }}/{{ item.item.key }} is missing, empty or not owned by uid {{ item.item.value }}.
+      Run infrastructure's bootstrap.yaml on {{ inventory_hostname }} first.
+    quiet: true
+  loop: "{{ paperless_secret_files.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+
+- name: Ensure the compose directory exists
+  ansible.builtin.file:
+    path: "{{ paperless_compose_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Ensure the compose file is present
+  ansible.builtin.copy:
+    src: "{{ paperless_repo_dir }}/paperless/docker-compose.yaml"
+    dest: "{{ paperless_compose_dir }}/docker-compose.yaml"
+    owner: root
+    group: root
+    mode: '0644'
+  register: paperless_compose_file
+
+- name: Ensure the settings file is present
+  ansible.builtin.template:
+    src: settings.env.j2
+    dest: "{{ paperless_settings_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  register: paperless_settings
+
+- name: Check the Docker host
+  when: paperless_manage_containers | bool
+  block:
+    # requests for the community.docker modules, yaml for docker_compose_v2
+    - name: Ensure Python libraries for the Docker modules are installed
+      ansible.builtin.apt:
+        name:
+          - python3-requests
+          - python3-yaml
+        state: present
+
+    - name: Read the networks of infrastructure
+      community.docker.docker_network_info:
+        name: "{{ item }}"
+      loop: "{{ paperless_external_networks }}"
+      register: paperless_networks
+
+    - name: Ensure the networks of infrastructure exist
+      ansible.builtin.assert:
+        that: item.exists
+        fail_msg: >-
+          The Docker network {{ item.item }} is missing. Run infrastructure's bootstrap.yaml on
+          {{ inventory_hostname }} first.
+        quiet: true
+      loop: "{{ paperless_networks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+# Before compose up: on a fresh host, Paperless must find its documents and the dump restored, not start empty.
+- name: Restore the volumes on a fresh host
+  ansible.builtin.import_tasks: restore.yaml
+
+- name: Ensure the database dump script is present
+  ansible.builtin.template:
+    src: paperless-db-dump.j2
+    dest: "{{ paperless_db_dump_script }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure the systemd units of the database dump are present
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: /etc/systemd/system/{{ item }}
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - paperless-db-dump.service
+    - paperless-db-dump.timer
+  notify: Reload systemd
+
+- name: Apply changed systemd units before enabling the timer
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure the database dump runs every night
+  ansible.builtin.systemd_service:
+    name: paperless-db-dump.timer
+    enabled: true
+    state: started
+  when: paperless_manage_containers | bool
+
+# Images are pinned (Renovate), so the default pull policy "missing" pulls exactly when a version changes. Compose
+# recreates a container when the compose file or a value from the env files changed.
+- name: Ensure the stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ paperless_compose_dir }}"
+    project_name: "{{ paperless_project_name }}"
+    env_files:
+      - "{{ paperless_settings_file }}"
+    state: present
+    pull: policy
+    # Fail instead of reporting changed when a container crash-loops or stays unhealthy.
+    wait: true
+    wait_timeout: "{{ paperless_wait_timeout }}"
+  when:
+    - paperless_manage_containers | bool
+    # check mode doesn't write the files, so Compose would compare against the old ones or none.
+    - not (ansible_check_mode and (paperless_compose_file is changed or paperless_settings is changed))

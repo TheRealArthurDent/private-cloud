@@ -8,3 +8,6 @@ RUN apt-get update \
 RUN useradd --create-home --shell /bin/bash dragon \
  && echo 'dragon ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/bootstrap \
  && chmod 0440 /etc/sudoers.d/bootstrap
+
+# Raspberry Pi OS runs systemd; the image has no unit directory for the paperless role's timer.
+RUN mkdir -p /etc/systemd/system
