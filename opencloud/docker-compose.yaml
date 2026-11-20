@@ -36,6 +36,8 @@ services:
       IDM_CREATE_DEMO_USERS: "false"
       OC_DEFAULT_LANGUAGE: de
       FRONTEND_CHECK_FOR_UPDATES: "false"
+      # No "Support OpenCloud" card (donate, buy support) in the web UI's sidebar
+      WEB_OPTION_DISABLE_SPONSOR_LINK: "true"
       # Shares need a password; there are no guests from outside (no internet exposure)
       OC_SHARING_PUBLIC_SHARE_MUST_HAVE_PASSWORD: "true"
       OC_ENABLE_GUEST_LINKS: "false"
