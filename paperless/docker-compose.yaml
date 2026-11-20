@@ -152,7 +152,7 @@ services:
   # Converts HTML mails (Chromium) and office files (LibreOffice) to PDF; needs both, so the full image.
   gotenberg:
     container_name: paperless-gotenberg
-    image: gotenberg/gotenberg:8.40.0
+    image: gotenberg/gotenberg:9.9.1
     # The image's user gotenberg
     user: "1001:1001"
     restart: unless-stopped
