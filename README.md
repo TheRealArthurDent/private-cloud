@@ -69,6 +69,44 @@ location / {
 
 On a new host without a backup, the first deployment needs `-e skip_opencloud_restore=true`.
 
+### Upgrading to a new Production release
+
+Renovate opens the PR; a new major (7.2 → 9.1) has manual steps that the role doesn't run. The commands below follow
+the official [Upgrade 9.1.x guide][oc-upgrade-9.1] for this stack (container `opencloud`, volume `opencloud_config`,
+Bleve search index). Of its breaking changes only the configuration patch and the search index concern this stack:
+no Yjs, no custom thumbnails, quota, mail templates or web extensions, guest links off.
+
+On the host, before deploying the new version:
+
+```sh
+# 1. A current backup, and the running version
+docker exec resticprofile resticprofile backup
+docker inspect --format '{{.Config.Image}}' opencloud
+
+# 2. Stop OpenCloud and patch opencloud.yaml with the new image (`opencloud init --diff` writes opencloud.config.patch)
+docker stop opencloud
+docker run --rm -it --user 1000:1000 --entrypoint /bin/sh -v opencloud_config:/etc/opencloud opencloudeu/opencloud:9.1.1
+#   inside the container:
+#   cd /etc/opencloud && opencloud init --diff
+#   cat opencloud.config.patch                          # review; it may drop the thumbnails section, that's expected
+#   patch --dry-run opencloud.yaml < opencloud.config.patch && patch opencloud.yaml < opencloud.config.patch
+#   exit
+```
+
+Then deploy as usual (`ansible-playbook deploy.yaml --limit <host>`, `--check --diff` first), and on the host:
+
+```sh
+# 3. Rebuild the versioned search index (since 8.x); old files aren't found until it's done. Takes a while on the Pi.
+docker exec opencloud opencloud search index --all-spaces --force-rescan
+# 4. Once older files show up in the web UI's search, remove the old, unversioned index
+docker exec opencloud rm -r /var/lib/opencloud/search/bleve
+docker logs --tail=200 opencloud
+```
+
+Check afterwards: sign in, upload and download, spaces and shares, search, previews.
+
+[oc-upgrade-9.1]: https://docs.opencloud.eu/docs/next/admin/maintenance/upgrade/production/upgrade-9.1.x
+
 ## Paperless-ngx
 
 `paperless/docker-compose.yaml` runs five containers as the Compose project `paperless`:
