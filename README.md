@@ -93,6 +93,11 @@ with two threads. The user `admin` is created on the first start with `PAPERLESS
 the mail account and the mail rules are set up in the web UI and live in the database, not in this repo. Mail rules
 read one dedicated folder or account, not a whole inbox.
 
+Paperless supports only the Gotenberg and Tika majors its own compose files use (`docker/compose/` upstream), so
+`renovate.json` caps both at the pinned major. Every Paperless update PR carries a prompt in its description: hand it
+to Claude to align Gotenberg and Tika with the new Paperless version on that branch, and to raise a cap when upstream
+moves to a new major.
+
 ### Backup and restore
 
 The live database volume `paperless_pgdata` is not backed up. A systemd timer (`paperless-db-dump.timer`, 02:45)

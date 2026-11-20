@@ -54,6 +54,38 @@
         "major"
       ],
       "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Paperless supports only the Gotenberg major its upstream compose files use (tests/test_renovate.py). Raise the cap when a Paperless release does.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "gotenberg/gotenberg"
+      ],
+      "allowedVersions": "<9"
+    },
+    {
+      "description": "Paperless supports only the Tika major its upstream compose files use (Tika 4 answers in Markdown, not XHTML). Raise the cap when a Paperless release does.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "apache/tika"
+      ],
+      "allowedVersions": "<4"
+    },
+    {
+      "description": "Gotenberg and Tika follow Paperless: the PR says how to align them.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/paperless-ngx/paperless-ngx"
+      ],
+      "prBodyNotes": [
+        "**Gotenberg and Tika:** Paperless dictates their versions. Prompt for Claude:\n\n```text\nPaperless-ngx is updated to {{{newVersion}}} on branch {{{branchName}}} of private-cloud. Read the gotenberg and tika image tags in docker/compose/docker-compose.*.yml of paperless-ngx at tag v{{{newVersion}}} and its release notes since v{{{currentVersion}}}. Compare them with paperless/docker-compose.yaml. If upstream moved to a newer minor or major, push the matching tags to this branch, raise allowedVersions for gotenberg/gotenberg or apache/tika in renovate.json on a new major, and check the Gotenberg flags against the new version (homelab-security#4). Report what changed, or that nothing has to.\n```"
+      ]
     }
   ]
 }
