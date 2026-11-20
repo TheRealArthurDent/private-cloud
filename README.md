@@ -85,7 +85,8 @@ docker inspect --format '{{.Config.Image}}' opencloud
 
 # 2. Stop OpenCloud and patch opencloud.yaml with the new image (`opencloud init --diff` writes opencloud.config.patch)
 docker stop opencloud
-docker run --rm -it --user 1000:1000 --entrypoint /bin/sh -v opencloud_config:/etc/opencloud opencloudeu/opencloud:9.1.1
+# OC_INSECURE=false should answer init's question about disabling certificate checks (as in the compose file); answer `no` if it still asks
+docker run --rm -it --user 1000:1000 -e OC_INSECURE=false --entrypoint /bin/sh -v opencloud_config:/etc/opencloud opencloudeu/opencloud:9.1.1
 #   inside the container:
 #   cd /etc/opencloud && opencloud init --diff
 #   cat opencloud.config.patch                          # review; it may drop the thumbnails section, that's expected
