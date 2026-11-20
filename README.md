@@ -72,9 +72,9 @@ On a new host without a backup, the first deployment needs `-e skip_opencloud_re
 ### Upgrading to a new Production release
 
 Renovate opens the PR; a new major (7.2 → 9.1) has manual steps that the role doesn't run. The commands below follow
-the official [Upgrade 9.1.x guide][oc-upgrade-9.1] for this stack (container `opencloud`, volume `opencloud_config`, Bleve search index). Of its breaking changes only
-the configuration patch and the search index concern this stack: no Yjs, no custom thumbnails, quota, mail templates
-or web extensions, guest links off.
+the official [Upgrade 9.1.x guide][oc-upgrade-9.1] for this stack (container `opencloud`, volume `opencloud_config`,
+Bleve search index). Of its breaking changes only the configuration patch and the search index concern this stack:
+no Yjs, no custom thumbnails, quota, mail templates or web extensions, guest links off.
 
 On the host, before deploying the new version:
 
