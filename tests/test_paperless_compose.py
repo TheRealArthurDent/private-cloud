@@ -272,3 +272,13 @@ def test_the_database_dump_runs_before_the_backup():
     hour, minute = map(int, defaults()["paperless_db_dump_time"].split(":"))
     assert (hour, minute) < (3, 0)
     assert hour >= 1
+
+
+def test_the_webserver_has_time_for_the_first_start():
+    # The image's healthcheck has no start period: 5 misses 30 s apart make the webserver unhealthy after 2.5 minutes,
+    # and `compose up --wait` fails. On a fresh Pi the first start runs every migration and took about 2:45.
+    healthcheck = service("webserver")["healthcheck"]
+
+    assert "localhost:8000" in " ".join(healthcheck["test"])
+    assert healthcheck["start_period"] == "10m"
+    assert healthcheck["start_interval"] == "5s"

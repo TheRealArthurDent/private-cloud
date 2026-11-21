@@ -75,7 +75,16 @@ services:
     # OCR of a large scan (Ghostscript, Tesseract, OCRmyPDF) runs here
     mem_limit: 2g
     pids_limit: 512
-    # The image's healthcheck: curl against the webserver on port 8000
+    # The image's healthcheck (curl against port 8000) has no start period and turns unhealthy after 5 misses 30 s
+    # apart. On a fresh host the first start runs every migration, which took about 2:45 on the Pi, so compose up
+    # --wait failed. Same check, with time for the first start (paperless_wait_timeout is 15 minutes).
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "-S", "-L", "--max-time", "2", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+      start_interval: 5s
     logging:
       driver: local
 
