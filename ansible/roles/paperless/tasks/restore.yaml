@@ -49,7 +49,7 @@
   register: paperless_restore_items_file
 
 # Docker doesn't register a restored _data directory by itself. With the labels Compose sets, compose up adopts
-# the volume instead of warning that it was created outside the project (raspberry#296). An existing volume is
+# the volume instead of warning that it was created outside the project (infrastructure#296). An existing volume is
 # left alone.
 - name: Ensure the volumes to restore exist with the labels of the compose project
   community.docker.docker_volume:

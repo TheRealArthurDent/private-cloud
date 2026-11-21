@@ -1,4 +1,4 @@
-"""opencloud/docker-compose.yaml and the opencloud role fit together and with raspberry's infrastructure."""
+"""opencloud/docker-compose.yaml and the opencloud role fit together and with infrastructure's infrastructure."""
 
 import re
 from pathlib import Path
@@ -34,7 +34,7 @@ def test_image_is_pinned():
 
 
 def test_no_port_is_published():
-    """Only raspberry's nginx reaches OpenCloud, over the network siz; nothing listens on the host."""
+    """Only infrastructure's nginx reaches OpenCloud, over the network siz; nothing listens on the host."""
     assert "ports" not in service()
     assert service()["networks"] == ["siz"]
     assert compose()["networks"]["siz"] == {"name": "siz", "external": True}
@@ -52,7 +52,7 @@ def test_the_root_ca_the_role_checks_is_mounted():
     assert f"{root_ca}:/etc/ssl/certs/rootCA.pem:ro" in service()["volumes"]
 
 
-# raspberry's certificate_check role restarts the containers with this label when it replaces the root CA. A bind
+# infrastructure's certificate_check role restarts the containers with this label when it replaces the root CA. A bind
 # mount keeps showing the old file, and Go reads the trust store only at start (private-cloud thread on the expired
 # root CA, 2026-11-16: every upload failed with 500 until OpenCloud was restarted).
 ROOT_CA_RESTART_LABEL = "root-ca.restart-on-change"
@@ -63,7 +63,7 @@ def test_opencloud_restarts_when_the_root_ca_changes():
 
 
 def test_every_variable_comes_from_an_env_file():
-    """Compose interpolates ${VAR} from settings.env (role) and .env (raspberry's secrets role)."""
+    """Compose interpolates ${VAR} from settings.env (role) and .env (infrastructure's secrets role)."""
     referenced = set(re.findall(r"\$\{(\w+)\}", COMPOSE.read_text()))
     settings = set(re.findall(r"^(\w+)=", (ROLE / "templates" / "settings.env.j2").read_text(), re.MULTILINE))
     secrets = set(re.findall(r"^(\w+)=", (ROOT / "opencloud" / ".env.example").read_text(), re.MULTILINE))

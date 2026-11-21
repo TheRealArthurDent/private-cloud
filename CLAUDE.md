@@ -11,14 +11,14 @@ data and an external USB SSD for backups. The apps are reachable only from the h
   Postgres, Valkey, Gotenberg and Tika) are the apps. Each app gets its own directory, role and Compose project; the
   compose file is copied to the host as it is. Paperless' hardening (non-root, internal network, Gotenberg flags)
   is checked by `tests/test_paperless_compose.py`; keep it when changing the stack.
-- The README's OpenCloud section lists what raspberry must provide on the host (secrets key, SAN, nginx vhost,
+- The README's OpenCloud section lists what infrastructure must provide on the host (secrets key, SAN, nginx vhost,
   Pi-hole record, `stack_backup_stacks`); keep it in sync when the role's assumptions change.
-- **raspberry provides what this stack depends on**, as it does for smart-home on raspi: host setup, Docker, the
-  nginx reverse proxy with its vhosts and certificate, the secrets files (rendered from KeePass by raspberry's
-  `secrets` role), and the resticprofile backups. raspberry is being extended to manage dungeon as a second host
-  (its `stack` role split into components per host, raspberry#239). Without raspberry's bootstrap on the host,
+- **infrastructure provides what this stack depends on**, as it does for smart-home on raspi: host setup, Docker, the
+  nginx reverse proxy with its vhosts and certificate, the secrets files (rendered from KeePass by infrastructure's
+  `secrets` role), and the resticprofile backups. infrastructure is being extended to manage dungeon as a second host
+  (its `stack` role split into components per host, infrastructure#239). Without infrastructure's bootstrap on the host,
   this stack doesn't start.
-- Each app restores its own state before it starts (clean-slate restore through raspberry's `restic-restore`
+- Each app restores its own state before it starts (clean-slate restore through infrastructure's `restic-restore`
   helper, like smart-home#1).
 
 ## Layout
@@ -51,7 +51,7 @@ settings themselves. Don't work around a block; give the user the command or the
 
 ## Secrets
 
-Passwords live in KeePass and reach the Pi as `.env` files through raspberry's `secrets` role; this repo has no
+Passwords live in KeePass and reach the Pi as `.env` files through infrastructure's `secrets` role; this repo has no
 KeePass access of its own. Never commit a `.env` file, never read or print one, and never put secret values into
 config files in this repo; reference `${VAR}` from the env file instead. Each app documents its keys in an
 `.env.example` without values; new apps use Compose secrets instead (files below `/etc/docker/<app>/secrets/`,
@@ -71,7 +71,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/
 .venv/bin/pre-commit run --all-files                    # whitespace, YAML, gitleaks, renovate config, actionlint
 ```
 
-When writing or changing an Ansible role, follow raspberry's `ansible-role` skill
+When writing or changing an Ansible role, follow infrastructure's `ansible-role` skill
 (`.claude/skills/ansible-role/SKILL.md` there): FQCN, `no_log`, idempotence, a Molecule `verify.yaml` check per
 change.
 

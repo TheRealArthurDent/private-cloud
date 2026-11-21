@@ -18,23 +18,23 @@ resolves and with certificates from the private root CA.
 
 ## How it fits together
 
-[raspberry](https://github.com/TheRealArthurDent/raspberry) sets up the host and the shared infrastructure: SSH,
-Docker, the nginx reverse proxy and its certificate, the secrets (`.env` files from KeePass), and the resticprofile
-backups. This repo only deploys the applications on top of it, the same way
-[smart-home](https://github.com/TheRealArthurDent/smart-home) does on raspi. raspberry's `bootstrap.yaml` must have
+[infrastructure](https://github.com/TheRealArthurDent/infrastructure) sets up the host and the shared services:
+SSH, Docker, the nginx reverse proxy and its certificate, the secrets (`.env` files from KeePass), and the
+resticprofile backups. This repo only deploys the applications on top of it, the same way
+[smart-home](https://github.com/TheRealArthurDent/smart-home) does on raspi. infrastructure's `bootstrap.yaml` must have
 run on the host first.
 
 ## OpenCloud
 
 `opencloud/docker-compose.yaml` runs the official image (`opencloudeu/opencloud`, the stable releases) without a
-host port: raspberry's nginx terminates TLS and proxies to `opencloud:9200` over the network `siz`. The first start
+host port: infrastructure's nginx terminates TLS and proxies to `opencloud:9200` over the network `siz`. The first start
 runs `opencloud init`, which creates the user `admin` with `OPENCLOUD_ADMIN_PASSWORD` and writes the generated
 secrets to the volume `opencloud_config`. Users, files and the search index live in `opencloud_data`. Both volumes
 are in the restic backup and come back by themselves on a fresh host (clean-slate restore).
 
-What raspberry has to provide on the host before the first deployment:
+What infrastructure has to provide on the host before the first deployment:
 
-| What | Where in raspberry |
+| What | Where in infrastructure |
 | --- | --- |
 | `/etc/docker/opencloud/.env` with `OPENCLOUD_ADMIN_PASSWORD` (keys in `opencloud/.env.example`) | `secrets` role, from KeePass |
 | `/etc/ssl/certs/rootCA.pem`, and `opencloud` in the certificate's SANs | `certificate_check` role (`certificate_check_subdomains`) |

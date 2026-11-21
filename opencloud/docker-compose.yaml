@@ -1,9 +1,9 @@
 # OpenCloud: files, sync and sharing. Based on https://github.com/opencloud-eu/opencloud-compose (docker-compose.yml
-# and external-proxy/opencloud.yml), without Traefik: raspberry's nginx terminates TLS and proxies to port 9200.
+# and external-proxy/opencloud.yml), without Traefik: infrastructure's nginx terminates TLS and proxies to port 9200.
 #
 # The opencloud role copies this file to the host and runs it as project "opencloud" with two env files:
 #   settings.env  rendered by the role (OPENCLOUD_URL)
-#   .env          rendered by raspberry's secrets role from KeePass (keys in opencloud/.env.example)
+#   .env          rendered by infrastructure's secrets role from KeePass (keys in opencloud/.env.example)
 services:
   opencloud:
     container_name: opencloud
@@ -13,8 +13,8 @@ services:
     user: "1000:1000"
     restart: unless-stopped
     labels:
-      # raspberry's certificate_check role restarts this container when it replaces the root CA: the bind mount below
-      # keeps showing the old file, and the services read the trust store only at start.
+      # infrastructure's certificate_check role restarts this container when it replaces the root CA: the bind mount
+      # below keeps showing the old file, and the services read the trust store only at start.
       root-ca.restart-on-change: "true"
     # `opencloud init` writes /etc/opencloud/opencloud.yaml with random secrets on the first start and fails on every
     # later one because the file exists, so its error is ignored.
@@ -65,7 +65,7 @@ volumes:
   data:
 
 networks:
-  # raspberry's network of the nginx reverse proxy
+  # infrastructure's network of the nginx reverse proxy
   siz:
     name: siz
     external: true

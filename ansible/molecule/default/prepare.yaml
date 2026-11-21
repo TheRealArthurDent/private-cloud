@@ -1,10 +1,10 @@
-# A Pi after raspberry's bootstrap: secrets file, root CA, restore helper.
+# A Pi after infrastructure's bootstrap: secrets file, root CA, restore helper.
 - name: Prepare
   hosts: all
   become: true
   gather_facts: false
   tasks:
-    - name: Create the config directory of raspberry's secrets role
+    - name: Create the config directory of infrastructure's secrets role
       ansible.builtin.file:
         path: /etc/docker/opencloud
         state: directory
@@ -13,7 +13,7 @@
         mode: '0755'
 
     # Every value containing LEAKCANARY is a secret; verify.yaml fails if one shows up in the Ansible log.
-    - name: Create the secrets file like raspberry's secrets role does
+    - name: Create the secrets file like infrastructure's secrets role does
       ansible.builtin.copy:
         content: |
           OPENCLOUD_ADMIN_PASSWORD=LEAKCANARY-opencloud-admin
@@ -54,7 +54,7 @@
         - {key: postgres_password, value: 'LEAKCANARY-paperless-db tes$abc #c', uid: 70}
       no_log: true
 
-    - name: Create the root CA like raspberry's certificate_check role does
+    - name: Create the root CA like infrastructure's certificate_check role does
       ansible.builtin.copy:
         content: |
           -----BEGIN CERTIFICATE-----
@@ -65,7 +65,7 @@
         group: root
         mode: '0644'
 
-    # raspberry's stack role installs the restore helper and its config directories.
+    # infrastructure's stack role installs the restore helper and its config directories.
     - name: Create the config directories of the restore helper
       ansible.builtin.file:
         path: "{{ item }}"
@@ -80,7 +80,7 @@
     # Without a Docker daemon there is no resticprofile container to restore from. The stub logs its arguments for
     # verify.yaml, needs the stack's item list like the real helper, and keeps the marker semantics: the first run
     # restores, every later one finds the marker.
-    - name: Install a stub of raspberry's restic-restore
+    - name: Install a stub of infrastructure's restic-restore
       ansible.builtin.copy:
         content: |
           #!/usr/bin/env python3
