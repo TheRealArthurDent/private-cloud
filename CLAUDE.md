@@ -38,7 +38,7 @@ data and an external USB SSD for backups. The apps are reachable only from the h
 | Host | Purpose |
 | --- | --- |
 | `dungeon` (192.168.1.5) | **Production** private cloud and backup target of raspi. Only the user deploys to it; hand them the commands. |
-| `testbed` (192.168.1.7) | Test Pi, reachable only from the home network: propose the commands to the user (`--check --diff`, real run, second run with `changed=0`). |
+| `testbench` (192.168.1.7) | Test Pi, reachable only from the home network: propose the commands to the user (`--check --diff`, real run, second run with `changed=0`). |
 
 `raspi` (192.168.1.2) is production too, but not part of this repo's inventory.
 
