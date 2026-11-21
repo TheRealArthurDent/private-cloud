@@ -1,5 +1,5 @@
 ---
-# Config of the OpenCloud stack lives below this directory. raspberry's secrets role writes the .env here.
+# Config of the OpenCloud stack lives below this directory. infrastructure's secrets role writes the .env here.
 opencloud_dir: /etc/docker/opencloud
 opencloud_env_file: "{{ opencloud_dir }}/.env"
 # Settings without secrets, rendered by this role (templates/settings.env.j2)
@@ -9,10 +9,10 @@ opencloud_project_name: opencloud
 opencloud_compose_dir: "{{ opencloud_dir }}/compose"
 # The repo checkout the role copies the stack from
 opencloud_repo_dir: "{{ (role_path | realpath) ~ '/../../..' }}"
-# The URL users and the OpenCloud services reach the web UI at: raspberry's nginx vhost opencloud.<host>, which
+# The URL users and the OpenCloud services reach the web UI at: infrastructure's nginx vhost opencloud.<host>, which
 # Pi-hole resolves and whose certificate comes from the private root CA. OpenCloud needs it to match exactly.
 opencloud_url: https://opencloud.{{ inventory_hostname }}
-# The private root CA on the host (raspberry's certificate_check role puts it there). docker-compose.yaml mounts
+# The private root CA on the host (infrastructure's certificate_check role puts it there). docker-compose.yaml mounts
 # this path into the container (tests/test_compose.py).
 opencloud_root_ca: /etc/ssl/certs/rootCA.pem
 # Seconds `compose up` waits for the container to be healthy; the first start initializes config and users
@@ -20,7 +20,7 @@ opencloud_wait_timeout: 300
 # Compose up needs a running Docker daemon (false in Molecule).
 opencloud_manage_containers: true
 
-# Clean-slate restore before the stack starts on a fresh host, the same way as smart-home: raspberry's stack role
+# Clean-slate restore before the stack starts on a fresh host, the same way as smart-home: infrastructure's stack role
 # installs the helper /usr/local/bin/restic-restore; this role lists the stack's volumes for it and calls it before
 # compose up. The helper restores only when every listed volume is empty and writes
 # /var/lib/restic-restore/opencloud.done, so a host that already has data only gets the marker.
@@ -33,7 +33,7 @@ opencloud_restore_helper: /usr/local/bin/restic-restore
 opencloud_docker_volumes_dir: /var/lib/docker/volumes
 # Named volumes of opencloud/docker-compose.yaml that hold state not coming from IaC (tests/test_restore_volumes.py):
 #   services: the services mounting the volume; their containers are stopped during a targeted restore
-#   preserve: files inside the volume (globs, relative to it) that raspberry's backup excludes (excludes.j2)
+#   preserve: files inside the volume (globs, relative to it) that infrastructure's backup excludes (excludes.j2)
 opencloud_restore_volumes:
   config:
     services: [opencloud]
