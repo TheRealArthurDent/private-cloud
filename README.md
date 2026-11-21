@@ -197,8 +197,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/
 From `ansible/`, always with `--limit` to one host and a dry run first:
 
 ```sh
-../.venv/bin/ansible-playbook deploy.yaml --limit testbed --check --diff
-../.venv/bin/ansible-playbook deploy.yaml --limit testbed
+../.venv/bin/ansible-playbook deploy.yaml --limit testbench --check --diff
+../.venv/bin/ansible-playbook deploy.yaml --limit testbench
 ```
 
 A second run must report `changed=0`. Notes for Claude Code are in `CLAUDE.md`.
