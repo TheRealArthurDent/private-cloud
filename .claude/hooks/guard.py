@@ -43,7 +43,7 @@ if tool == "Bash":
         block("direct access to dungeon or raspi (production).")
     if re.search(runs(r"ansible(?:-playbook)?"), cmd):
         if not re.search(r"(--limit|-l)[ =]", cmd):
-            block("ansible without --limit. Use --limit testbed.")
+            block("ansible without --limit. Use --limit testbench.")
         if re.search(r"(--limit|-l)[ =]['\"]?[^ ]*(" + PROD[1:-1] + r"|\ball\b|\*)", cmd):
             block("ansible against dungeon or raspi (production) or all hosts. Hand the user the command instead.")
 
