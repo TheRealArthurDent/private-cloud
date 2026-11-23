@@ -75,7 +75,8 @@ When writing or changing an Ansible role, follow infrastructure's `ansible-role`
 (`.claude/skills/ansible-role/SKILL.md` there): FQCN, `no_log`, idempotence, a Molecule `verify.yaml` check per
 change.
 
-CI runs on every PR: unit tests (`tests.yaml`), Ansible lint and Molecule (`ansible.yaml`), codespell, and reviewdog (misspell,
+CI runs on every PR: unit tests (`tests.yaml`), Ansible lint and Molecule (`ansible.yaml`), codespell, zizmor
+(`zizmor.yaml`, workflow lint in the version of its pre-commit hook) and reviewdog (misspell,
 actionlint, yamllint, markdownlint). Required checks for `main` are in `.github/rulesets/`; a required job must
 run on every PR (no `paths` filter), or `tests/test_rulesets.py` fails.
 
