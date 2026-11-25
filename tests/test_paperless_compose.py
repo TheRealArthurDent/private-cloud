@@ -205,6 +205,11 @@ def test_the_pi_runs_one_task_worker():
     assert environment["PAPERLESS_WEBSERVER_WORKERS"] == "1"
 
 
+def test_duplicates_are_rejected():
+    """Since 3.0 Paperless consumes a file it already has unless this is set; documents are shared, not copied."""
+    assert service("webserver")["environment"]["PAPERLESS_CONSUMER_DELETE_DUPLICATES"] == "true"
+
+
 def test_the_ocr_languages_are_the_installed_ones():
     """Rootless Paperless can't install languages at start (PAPERLESS_OCR_LANGUAGES)."""
     assert "PAPERLESS_OCR_LANGUAGES" not in service("webserver")["environment"]

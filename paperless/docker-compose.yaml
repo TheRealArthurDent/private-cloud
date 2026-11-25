@@ -52,6 +52,9 @@ services:
       PAPERLESS_TIME_ZONE: Europe/Berlin
       # Set before the first document: changing it later renames every stored file.
       PAPERLESS_FILENAME_FORMAT: "{{ created_year }}/{{ correspondent }}/{{ title }}"
+      # Since 3.0 Paperless consumes a file it already has (same checksum) and only warns. Reject and delete it
+      # instead: a document several people need is shared with them, not imported twice.
+      PAPERLESS_CONSUMER_DELETE_DUPLICATES: "true"
       # The Pi is shared with OpenCloud: one document at a time, two pages of it in parallel.
       PAPERLESS_TASK_WORKERS: "1"
       PAPERLESS_THREADS_PER_WORKER: "2"
