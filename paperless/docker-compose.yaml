@@ -14,7 +14,7 @@ services:
   webserver:
     container_name: paperless-webserver
     hostname: paperless
-    image: ghcr.io/paperless-ngx/paperless-ngx:3.4.2
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.5.1
     # Rootless: s6 starts directly as the image's user paperless, which owns the volumes' directories in the image.
     # Upstream doesn't support it together with PAPERLESS_OCR_LANGUAGES; deu and eng are in the image.
     user: "1000:1000"
