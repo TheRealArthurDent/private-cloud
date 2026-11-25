@@ -129,9 +129,9 @@ Gotenberg runs without JavaScript and refuses to fetch any URL (private or publi
 Settings worth knowing before the first document: OCR in `deu+eng`, file names
 `{{ created_year }}/{{ correspondent }}/{{ title }}` (changing this later renames every file), one task worker
 with two threads, duplicates (same checksum) rejected and deleted from the consume folder; a document several
-people need is shared with them in the web UI instead. The user `admin` is created on the first start with `PAPERLESS_ADMIN_PASSWORD`; personal accounts,
-the mail account and the mail rules are set up in the web UI and live in the database, not in this repo. Mail rules
-read one dedicated folder or account, not a whole inbox.
+people need is shared with them in the web UI instead. The user `admin` is created on the first start with
+`PAPERLESS_ADMIN_PASSWORD`; personal accounts, the mail account and the mail rules are set up in the web UI and live
+in the database, not in this repo. Mail rules read one dedicated folder or account, not a whole inbox.
 
 Paperless supports only the Gotenberg and Tika majors its own compose files use (`docker/compose/` upstream), so
 `renovate.json` caps both at the pinned major. Every Paperless update PR carries a prompt in its description: hand it
